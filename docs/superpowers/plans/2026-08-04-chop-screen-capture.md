@@ -17,7 +17,7 @@
 - **Annotations are stored in image coordinates**, never screen or canvas coordinates.
 - **TDD:** write the failing test, run it, watch it fail, then implement. Every task below is ordered this way — do not reorder.
 - **Minimum 80% coverage** on `src/shared/`. Check with `npm run test:coverage`.
-- **No magic numbers.** All thresholds live in `src/shared/constants.ts`.
+- **No magic numbers.** Cross-module tunables live in `src/shared/constants.ts`. Values used by exactly one module (e.g. `HIGHLIGHT_ALPHA`, `SELECTION_COLOR`) may be named constants at the top of that module — what is forbidden is an unexplained literal, not a locally-scoped named constant.
 - **File size:** 200–400 lines typical, 800 hard maximum. Split when a file grows past that.
 - **Commit after every task** using conventional commits (`feat:`, `fix:`, `test:`, `chore:`, `docs:`).
 - **Blur is implemented as pixelation**, never gaussian — a low-radius gaussian is partially reversible, which defeats the purpose of redaction.
@@ -2515,6 +2515,29 @@ describe('serializeDocument / parseDocument', () => {
     expect(() => parseDocument('{"id":"d"}')).toThrow(/document/i)
   })
 
+  it('drops a malformed cropRect rather than trusting the file', () => {
+    const payload = JSON.stringify({
+      id: 'd', width: 10, height: 10,
+      cropRect: { x: 'nope', y: 0, width: 5, height: 5 },
+      annotations: [],
+    })
+    expect(parseDocument(payload).cropRect).toBeNull()
+  })
+
+  it('drops a non-finite cropRect', () => {
+    const payload = '{"id":"d","width":10,"height":10,"cropRect":{"x":null,"y":0,"width":5,"height":5},"annotations":[]}'
+    expect(parseDocument(payload).cropRect).toBeNull()
+  })
+
+  it('keeps a well-formed cropRect', () => {
+    const payload = JSON.stringify({
+      id: 'd', width: 10, height: 10,
+      cropRect: { x: 1, y: 2, width: 3, height: 4 },
+      annotations: [],
+    })
+    expect(parseDocument(payload).cropRect).toEqual({ x: 1, y: 2, width: 3, height: 4 })
+  })
+
   it('drops annotations of an unknown kind rather than failing the whole load', () => {
     const payload = JSON.stringify({
       id: 'd',
@@ -2636,6 +2659,21 @@ export function serializeDocument(doc: CaptureDocument): string {
 
 const KINDS: readonly Annotation['kind'][] = ['box', 'arrow', 'text', 'highlight', 'blur']
 
+function isRect(value: unknown): value is Rect {
+  if (typeof value !== 'object' || value === null) return false
+  const r = value as Record<string, unknown>
+  return (
+    typeof r.x === 'number' &&
+    typeof r.y === 'number' &&
+    typeof r.width === 'number' &&
+    typeof r.height === 'number' &&
+    Number.isFinite(r.x) &&
+    Number.isFinite(r.y) &&
+    Number.isFinite(r.width) &&
+    Number.isFinite(r.height)
+  )
+}
+
 function isAnnotation(value: unknown): value is Annotation {
   if (typeof value !== 'object' || value === null) return false
   const candidate = value as { kind?: unknown; id?: unknown }
@@ -2666,7 +2704,7 @@ export function parseDocument(json: string): CaptureDocument {
     id,
     width,
     height,
-    cropRect: (cropRect ?? null) as Rect | null,
+    cropRect: isRect(cropRect) ? cropRect : null,
     annotations: Array.isArray(annotations) ? annotations.filter(isAnnotation) : [],
   }
 }
@@ -2675,7 +2713,7 @@ export function parseDocument(json: string): CaptureDocument {
 - [ ] **Step 4: Run the test and verify it passes**
 
 Run: `npx vitest run tests/shared/document.test.ts`
-Expected: PASS — 16 tests.
+Expected: PASS — 19 tests.
 
 - [ ] **Step 5: Commit**
 
