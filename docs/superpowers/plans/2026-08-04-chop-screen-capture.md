@@ -651,8 +651,10 @@ describe('dipToPhysical', () => {
   })
 
   it('rounds outward so no selected pixel is lost', () => {
+    // Span [10.6, 40.7) touches pixel indices 10..40 inclusive = 31 pixels.
+    // Span [20.6, 60.7) touches 20..60 inclusive = 41 pixels.
     expect(dipToPhysical({ x: 10.6, y: 20.6, width: 30.1, height: 40.1 }, 1)).toEqual({
-      x: 10, y: 20, width: 32, height: 42,
+      x: 10, y: 20, width: 31, height: 41,
     })
   })
 
