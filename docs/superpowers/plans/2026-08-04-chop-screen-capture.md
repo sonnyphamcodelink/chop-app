@@ -669,6 +669,29 @@ describe('physicalSize', () => {
   it('multiplies display bounds by the scale factor', () => {
     expect(physicalSize(primary)).toEqual({ width: 3024, height: 1964 })
   })
+
+  it('rounds outward at fractional scale factors, matching dipToPhysical', () => {
+    const fractional: DisplayInfo = {
+      id: 3,
+      bounds: { x: 0, y: 0, width: 1509, height: 849 },
+      scaleFactor: 1.25,
+    }
+    // 1509 * 1.25 = 1886.25 -> 1887, never 1886, or a full-width selection
+    // would compute a crop one pixel wider than the buffer.
+    expect(physicalSize(fractional)).toEqual({ width: 1887, height: 1062 })
+  })
+
+  it('never reports a size smaller than a full-display selection needs', () => {
+    const fractional: DisplayInfo = {
+      id: 4,
+      bounds: { x: 0, y: 0, width: 1707, height: 960 },
+      scaleFactor: 1.75,
+    }
+    const full = selectionToPhysical(fractional.bounds, fractional)
+    const size = physicalSize(fractional)
+    expect(full.x + full.width).toBeLessThanOrEqual(size.width)
+    expect(full.y + full.height).toBeLessThanOrEqual(size.height)
+  })
 })
 
 describe('displayForPoint', () => {
@@ -752,9 +775,13 @@ export function physicalSize(display: DisplayInfo): {
   readonly width: number
   readonly height: number
 } {
+  // Rounds outward to stay consistent with dipToPhysical's ceil on the far edge.
+  // Math.round here would under-report by a pixel at fractional scale factors
+  // (e.g. 1509 DIP at 1.25x), letting a full-width selection compute a crop
+  // rectangle wider than the buffer this function claims exists.
   return {
-    width: Math.round(display.bounds.width * display.scaleFactor),
-    height: Math.round(display.bounds.height * display.scaleFactor),
+    width: Math.ceil(display.bounds.width * display.scaleFactor),
+    height: Math.ceil(display.bounds.height * display.scaleFactor),
   }
 }
 
@@ -2245,6 +2272,18 @@ describe('cropCapture', () => {
     ).toBeNull()
   })
 
+  it('clamps a selection that exceeds the captured image bounds', () => {
+    // 1512 DIP at 2x reports a 3024-wide image; ask for more and the crop must
+    // be trimmed rather than requesting pixels that do not exist.
+    const result = cropCapture(capture, {
+      displayId: 1,
+      rect: { x: 1500, y: 0, width: 200, height: 100 },
+      source: 'region',
+    })
+    expect(result).not.toBeNull()
+    expect(result!.width).toBeLessThanOrEqual(3024)
+  })
+
   it('returns null for a zero-area selection', () => {
     expect(
       cropCapture(capture, {
@@ -2268,7 +2307,7 @@ Expected: FAIL — module not found.
 import { nativeImage } from 'electron'
 import { randomUUID } from 'node:crypto'
 import { selectionToPhysical } from '@shared/coords'
-import { rectArea } from '@shared/geometry'
+import { clampRect, rectArea } from '@shared/geometry'
 import type { CaptureResult, OverlaySelection } from '@shared/ipc'
 import type { DisplayCapture } from './capture-service'
 
@@ -2283,7 +2322,12 @@ export function cropCapture(
     return null
   }
 
-  const physical = selectionToPhysical(selection.rect, capture.display)
+  // The captured image's own size is authoritative — our arithmetic is not.
+  // Clamping here means a rounding disagreement can never ask for pixels that
+  // do not exist, which matters at fractional display scale factors.
+  const size = image.getSize()
+  const imageBounds = { x: 0, y: 0, width: size.width, height: size.height }
+  const physical = clampRect(selectionToPhysical(selection.rect, capture.display), imageBounds)
   if (rectArea(physical) === 0) return null
 
   const output = image.crop(physical)
