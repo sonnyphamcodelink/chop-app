@@ -31,9 +31,13 @@ export function physicalSize(display: DisplayInfo): {
   readonly width: number
   readonly height: number
 } {
+  // Rounds outward to stay consistent with dipToPhysical's ceil on the far edge.
+  // Math.round would under-report by a pixel at fractional scale factors
+  // (e.g. 1509 DIP at 1.25x), letting a full-width selection compute a crop
+  // rectangle wider than the buffer this function claims exists.
   return {
-    width: Math.round(display.bounds.width * display.scaleFactor),
-    height: Math.round(display.bounds.height * display.scaleFactor),
+    width: Math.ceil(display.bounds.width * display.scaleFactor),
+    height: Math.ceil(display.bounds.height * display.scaleFactor),
   }
 }
 

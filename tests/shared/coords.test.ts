@@ -74,6 +74,29 @@ describe('physicalSize', () => {
   it('multiplies display bounds by the scale factor', () => {
     expect(physicalSize(primary)).toEqual({ width: 3024, height: 1964 })
   })
+
+  it('rounds outward at fractional scale factors, matching dipToPhysical', () => {
+    const fractional: DisplayInfo = {
+      id: 3,
+      bounds: { x: 0, y: 0, width: 1509, height: 849 },
+      scaleFactor: 1.25,
+    }
+    // 1509 * 1.25 = 1886.25 -> 1887, never 1886, or a full-width selection
+    // would compute a crop one pixel wider than the buffer.
+    expect(physicalSize(fractional)).toEqual({ width: 1887, height: 1062 })
+  })
+
+  it('never reports a size smaller than a full-display selection needs', () => {
+    const fractional: DisplayInfo = {
+      id: 4,
+      bounds: { x: 0, y: 0, width: 1707, height: 960 },
+      scaleFactor: 1.75,
+    }
+    const full = selectionToPhysical(fractional.bounds, fractional)
+    const size = physicalSize(fractional)
+    expect(full.x + full.width).toBeLessThanOrEqual(size.width)
+    expect(full.y + full.height).toBeLessThanOrEqual(size.height)
+  })
 })
 
 describe('displayForPoint', () => {
