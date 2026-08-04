@@ -20,12 +20,10 @@ export function localToGlobal(rect: Rect, display: DisplayInfo): Rect {
  * selection never loses a pixel it visually covered.
  */
 export function dipToPhysical(rect: Rect, scaleFactor: number): Rect {
-  const scaled_x = rect.x * scaleFactor
-  const scaled_y = rect.y * scaleFactor
-  const left = Math.floor(scaled_x)
-  const top = Math.floor(scaled_y)
-  const right = Math.ceil((rect.x + rect.width) * scaleFactor) + (scaled_x % 1 !== 0 ? 1 : 0)
-  const bottom = Math.ceil((rect.y + rect.height) * scaleFactor) + (scaled_y % 1 !== 0 ? 1 : 0)
+  const left = Math.floor(rect.x * scaleFactor)
+  const top = Math.floor(rect.y * scaleFactor)
+  const right = Math.ceil((rect.x + rect.width) * scaleFactor)
+  const bottom = Math.ceil((rect.y + rect.height) * scaleFactor)
   return { x: left, y: top, width: right - left, height: bottom - top }
 }
 
