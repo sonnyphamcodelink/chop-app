@@ -1213,11 +1213,11 @@ Create `tests/main/window-providers/index.test.ts`:
 
 ```ts
 import { describe, expect, it, vi } from 'vitest'
+import { createStubWindowProvider } from '../../../src/main/window-providers/stub'
 import {
-  createStubWindowProvider,
   listCapturableWindows,
   withTimeout,
-} from '../../../src/main/window-providers/index'
+} from '../../../src/main/window-providers/timeout'
 import type { WindowRect } from '@shared/window-rect'
 import type { WindowProvider } from '../../../src/main/window-providers/types'
 
@@ -1288,21 +1288,19 @@ export function createStubWindowProvider(windows: readonly WindowRect[]): Window
 }
 ```
 
-- [ ] **Step 4: Write the provider index**
+- [ ] **Step 4: Write the electron-free timeout module**
 
-Create `src/main/window-providers/index.ts`:
+`withTimeout` and `listCapturableWindows` must be unit-testable, so they live in a
+module that never imports `electron`.
+
+Create `src/main/window-providers/timeout.ts`:
 
 ```ts
-import { app } from 'electron'
-import { join } from 'node:path'
 import { WINDOW_PROVIDER_TIMEOUT_MS } from '@shared/constants'
 import { filterCapturableWindows, type WindowRect } from '@shared/window-rect'
-import { createMacOsWindowProvider } from './macos'
-import { createStubWindowProvider } from './stub'
 import type { WindowProvider } from './types'
 
-export { createStubWindowProvider }
-export type { WindowProvider }
+export { WINDOW_PROVIDER_TIMEOUT_MS }
 
 /**
  * Wraps a provider so it can never hang or reject. On failure the caller gets an
@@ -1311,7 +1309,7 @@ export type { WindowProvider }
 export function withTimeout(provider: WindowProvider, timeoutMs: number): WindowProvider {
   return {
     async listWindows(): Promise<readonly WindowRect[]> {
-      let timer: NodeJS.Timeout | undefined
+      let timer: ReturnType<typeof setTimeout> | undefined
       const timeout = new Promise<readonly WindowRect[]>((resolve) => {
         timer = setTimeout(() => {
           console.warn(`Window provider timed out after ${timeoutMs}ms; region-only capture.`)
@@ -1330,6 +1328,29 @@ export function withTimeout(provider: WindowProvider, timeoutMs: number): Window
   }
 }
 
+export async function listCapturableWindows(
+  provider: WindowProvider,
+): Promise<readonly WindowRect[]> {
+  return filterCapturableWindows(await provider.listWindows())
+}
+```
+
+- [ ] **Step 5: Write the platform resolver**
+
+This module imports `electron`, so nothing in the test suite may import it.
+
+Create `src/main/window-providers/resolve.ts`:
+
+```ts
+import { app } from 'electron'
+import { join } from 'node:path'
+import { WINDOW_PROVIDER_TIMEOUT_MS } from '@shared/constants'
+import type { WindowRect } from '@shared/window-rect'
+import { createMacOsWindowProvider } from './macos'
+import { createStubWindowProvider } from './stub'
+import { withTimeout } from './timeout'
+import type { WindowProvider } from './types'
+
 function helperPath(): string {
   return app.isPackaged
     ? join(process.resourcesPath, 'windowlist')
@@ -1344,25 +1365,31 @@ export function resolveWindowProvider(): WindowProvider {
   if (process.platform === 'darwin') {
     return withTimeout(createMacOsWindowProvider(helperPath()), WINDOW_PROVIDER_TIMEOUT_MS)
   }
-  // Windows support is added in Task 20. Until then, region-only capture.
+  // Windows support is added in Task 26. Until then, region-only capture.
   return createStubWindowProvider([])
-}
-
-export async function listCapturableWindows(
-  provider: WindowProvider,
-): Promise<readonly WindowRect[]> {
-  return filterCapturableWindows(await provider.listWindows())
 }
 ```
 
-Note: `tests/main/window-providers/index.test.ts` imports only `createStubWindowProvider`, `withTimeout`, and `listCapturableWindows`, none of which touch `electron`. Add `electron` to `test.server.deps.inline` in `vitest.config.ts` only if the import graph causes a resolution error; if it does, move `resolveWindowProvider` and `helperPath` into a separate `resolve.ts` file that the test never imports.
+- [ ] **Step 6: Write the barrel**
 
-- [ ] **Step 5: Run the test and verify it passes**
+Create `src/main/window-providers/index.ts`:
+
+```ts
+export { createStubWindowProvider } from './stub'
+export { listCapturableWindows, withTimeout } from './timeout'
+export { resolveWindowProvider } from './resolve'
+export type { WindowProvider } from './types'
+```
+
+Importing this barrel pulls in `electron` via `resolve.ts`, which is correct for
+main-process code. Tests must import `./timeout` and `./stub` directly instead.
+
+- [ ] **Step 7: Run the test and verify it passes**
 
 Run: `npx vitest run tests/main/window-providers/index.test.ts`
 Expected: PASS — 6 tests.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
 git add -A
