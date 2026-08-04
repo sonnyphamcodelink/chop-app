@@ -10,7 +10,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "build:helper": "node scripts/build-swift-helper.mjs",
+    "postinstall": "node scripts/build-swift-helper.mjs"
   },
   "devDependencies": {
     "@types/node": "^24.13.3",
