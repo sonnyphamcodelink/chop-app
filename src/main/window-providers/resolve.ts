@@ -6,6 +6,7 @@ import { createMacOsWindowProvider } from './macos'
 import { createStubWindowProvider } from './stub'
 import { withTimeout } from './timeout'
 import type { WindowProvider } from './types'
+import { createWindowsWindowProvider } from './windows'
 
 function helperPath(): string {
   return app.isPackaged
@@ -21,6 +22,9 @@ export function resolveWindowProvider(): WindowProvider {
   if (process.platform === 'darwin') {
     return withTimeout(createMacOsWindowProvider(helperPath()), WINDOW_PROVIDER_TIMEOUT_MS)
   }
-  // Windows support is added in Task 26. Until then, region-only capture.
+  if (process.platform === 'win32') {
+    return withTimeout(createWindowsWindowProvider(), WINDOW_PROVIDER_TIMEOUT_MS)
+  }
+  // Any other platform gets region-only capture rather than a hard failure.
   return createStubWindowProvider([])
 }
