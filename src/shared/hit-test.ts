@@ -8,7 +8,7 @@ import {
   rectContains,
 } from './geometry'
 
-export type HandleId = 'nw' | 'ne' | 'sw' | 'se'
+export type HandleId = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w'
 
 /** Rough per-character width as a fraction of font size, for text bounds. */
 const TEXT_WIDTH_RATIO = 0.6
@@ -57,11 +57,19 @@ export function handleRects(
     width: HANDLE_SIZE,
     height: HANDLE_SIZE,
   })
+  const midX = rect.x + rect.width / 2
+  const midY = rect.y + rect.height / 2
+  const right = rect.x + rect.width
+  const bottom = rect.y + rect.height
   return [
     { id: 'nw', rect: at(rect.x, rect.y) },
-    { id: 'ne', rect: at(rect.x + rect.width, rect.y) },
-    { id: 'sw', rect: at(rect.x, rect.y + rect.height) },
-    { id: 'se', rect: at(rect.x + rect.width, rect.y + rect.height) },
+    { id: 'n', rect: at(midX, rect.y) },
+    { id: 'ne', rect: at(right, rect.y) },
+    { id: 'e', rect: at(right, midY) },
+    { id: 'se', rect: at(right, bottom) },
+    { id: 's', rect: at(midX, bottom) },
+    { id: 'sw', rect: at(rect.x, bottom) },
+    { id: 'w', rect: at(rect.x, midY) },
   ]
 }
 
@@ -79,12 +87,20 @@ export function resizeRect(rect: Rect, handle: HandleId, point: Point): Rect {
   switch (handle) {
     case 'nw':
       return normalizeRect(point, { x: right, y: bottom })
+    case 'n':
+      return normalizeRect({ x: left, y: point.y }, { x: right, y: bottom })
     case 'ne':
       return normalizeRect({ x: left, y: bottom }, point)
-    case 'sw':
-      return normalizeRect({ x: right, y: top }, point)
+    case 'e':
+      return normalizeRect({ x: left, y: top }, { x: point.x, y: bottom })
     case 'se':
       return normalizeRect({ x: left, y: top }, point)
+    case 's':
+      return normalizeRect({ x: left, y: top }, { x: right, y: point.y })
+    case 'sw':
+      return normalizeRect({ x: right, y: top }, point)
+    case 'w':
+      return normalizeRect({ x: point.x, y: top }, { x: right, y: bottom })
   }
 }
 

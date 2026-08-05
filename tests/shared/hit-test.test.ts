@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest'
-import { HANDLE_SIZE } from '@shared/constants'
 import { addAnnotation, type Annotation, createDocument } from '@shared/document'
 import {
   annotationAtPoint,
@@ -68,15 +67,11 @@ describe('annotationAtPoint', () => {
 })
 
 describe('handleRects', () => {
-  it('produces four corner handles centred on the corners', () => {
+  it('exposes four corners and four edge midpoints', () => {
     const handles = handleRects({ x: 100, y: 100, width: 200, height: 100 })
-    expect(handles.map((h) => h.id)).toEqual(['nw', 'ne', 'sw', 'se'])
-    expect(handles[0]!.rect).toEqual({
-      x: 100 - HANDLE_SIZE / 2,
-      y: 100 - HANDLE_SIZE / 2,
-      width: HANDLE_SIZE,
-      height: HANDLE_SIZE,
-    })
+    expect(handles.map((h) => h.id)).toEqual([
+      'nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w',
+    ])
   })
 })
 
@@ -111,6 +106,18 @@ describe('resizeRect', () => {
     const flipped = resizeRect(rect, 'se', { x: 50, y: 50 })
     expect(flipped.width).toBeGreaterThanOrEqual(0)
     expect(flipped.height).toBeGreaterThanOrEqual(0)
+  })
+
+  it('resizes from the east edge keeping left anchored', () => {
+    expect(resizeRect(rect, 'e', { x: 350, y: 150 })).toEqual({
+      x: 100, y: 100, width: 250, height: 100,
+    })
+  })
+
+  it('resizes from the north edge keeping bottom anchored', () => {
+    expect(resizeRect(rect, 'n', { x: 200, y: 50 })).toEqual({
+      x: 100, y: 50, width: 200, height: 150,
+    })
   })
 })
 
