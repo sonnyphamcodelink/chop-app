@@ -5,6 +5,7 @@ import { currentDocument } from '@shared/editor-state'
 import type { Point } from '@shared/geometry'
 import { annotationBounds, handleRects } from '@shared/hit-test'
 import { type CanvasFactory, renderDocument } from '@shared/render'
+import { cropDraftRect, documentWithDraft } from '@shared/tools'
 
 export const browserCanvasFactory: CanvasFactory = (width, height) => {
   const canvas = document.createElement('canvas')
@@ -60,6 +61,17 @@ export function createCanvasView(canvas: HTMLCanvasElement): CanvasView {
     ctx.restore()
   }
 
+  function drawCropDraft(ctx: CanvasRenderingContext2D, state: EditorState): void {
+    const rect = cropDraftRect(state.draft)
+    if (!rect) return
+    ctx.save()
+    ctx.strokeStyle = SELECTION_COLOR
+    ctx.lineWidth = 1 / currentScale
+    ctx.setLineDash([4 / currentScale, 3 / currentScale])
+    ctx.strokeRect(rect.x, rect.y, rect.width, rect.height)
+    ctx.restore()
+  }
+
   return {
     setImage(next: HTMLImageElement): void {
       image = next
@@ -67,7 +79,7 @@ export function createCanvasView(canvas: HTMLCanvasElement): CanvasView {
 
     render(state: EditorState): void {
       if (!image) return
-      const doc = currentDocument(state)
+      const doc = documentWithDraft(currentDocument(state), state.draft, state.style)
       const size = outputSize(doc)
       const parent = canvas.parentElement
       currentScale = fitScale(
@@ -87,6 +99,7 @@ export function createCanvasView(canvas: HTMLCanvasElement): CanvasView {
       ctx.scale(currentScale, currentScale)
       renderDocument(ctx, image, doc, browserCanvasFactory)
       drawSelection(ctx, state)
+      drawCropDraft(ctx, state)
       ctx.restore()
     },
 
