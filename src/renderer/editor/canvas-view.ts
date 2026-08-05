@@ -18,6 +18,8 @@ export const browserCanvasFactory: CanvasFactory = (width, height) => {
 export type CanvasView = {
   setImage(image: HTMLImageElement): void
   render(state: EditorState): void
+  /** Renders the exported image: no zoom, no selection chrome. */
+  renderTo(target: CanvasRenderingContext2D, state: EditorState): void
   toImagePoint(event: MouseEvent, state: EditorState): Point
   scale(): number
 }
@@ -86,6 +88,12 @@ export function createCanvasView(canvas: HTMLCanvasElement): CanvasView {
       renderDocument(ctx, image, doc, browserCanvasFactory)
       drawSelection(ctx, state)
       ctx.restore()
+    },
+
+    renderTo(target: CanvasRenderingContext2D, state: EditorState): void {
+      if (!image) return
+      // No scale and no selection chrome: this is the exported image.
+      renderDocument(target, image, currentDocument(state), browserCanvasFactory)
     },
 
     toImagePoint(event: MouseEvent, state: EditorState): Point {
