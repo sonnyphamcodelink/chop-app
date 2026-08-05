@@ -1,5 +1,5 @@
 import { setCrop, type CaptureDocument } from './document'
-import { initialCropRect } from './crop-session'
+import { fullImageRect, initialCropRect } from './crop-session'
 import {
   createHistory,
   type History,
@@ -7,7 +7,7 @@ import {
   redo,
   undo,
 } from './history'
-import type { Rect } from './geometry'
+import { rectsEqual, type Rect } from './geometry'
 import { type Draft, defaultStyle, type ToolId, type ToolStyle } from './tools'
 
 export type EditorState = {
@@ -55,8 +55,13 @@ export function setCropSession(state: EditorState, rect: Rect | null): EditorSta
 export function commitCrop(state: EditorState): EditorState {
   if (!state.cropSession) return state
   const rect = state.cropSession.rect
+  const doc = currentDocument(state)
+  const unchanged = doc.cropRect
+    ? rectsEqual(doc.cropRect, rect)
+    : rectsEqual(fullImageRect(doc), rect)
+  if (unchanged) return state
   return {
-    ...commitDocument(state, setCrop(currentDocument(state), rect)),
+    ...commitDocument(state, setCrop(doc, rect)),
     cropSession: { rect },
     tool: 'crop',
   }

@@ -8,7 +8,7 @@ import {
   setCropSession,
   setDraft,
 } from '@shared/editor-state'
-import { type Point, rectContains } from '@shared/geometry'
+import { type Point, rectContains, rectsEqual, type Rect } from '@shared/geometry'
 import { type HandleId, handleAtPoint, resizeRect } from '@shared/hit-test'
 import { beginDraft, draftToAnnotation, isDrawingTool, updateDraft } from '@shared/tools'
 import type { CanvasView } from './canvas-view'
@@ -23,10 +23,12 @@ type Gesture =
   | {
       readonly mode: 'crop-resize'
       readonly handle: HandleId
+      readonly startRect: Rect
     }
   | {
       readonly mode: 'crop-move'
       readonly last: Point
+      readonly startRect: Rect
     }
 
 function newId(): string {
@@ -54,9 +56,9 @@ export function attachInteractions(
       const { rect } = state.cropSession
       const handle = handleAtPoint(rect, point)
       if (handle) {
-        gesture = { mode: 'crop-resize', handle }
+        gesture = { mode: 'crop-resize', handle, startRect: rect }
       } else if (rectContains(rect, point)) {
-        gesture = { mode: 'crop-move', last: point }
+        gesture = { mode: 'crop-move', last: point, startRect: rect }
       }
       return
     }
@@ -110,7 +112,8 @@ export function attachInteractions(
     }
 
     if (finished.mode === 'crop-resize' || finished.mode === 'crop-move') {
-      store.set(commitCrop(state))
+      const moved = !state.cropSession || !rectsEqual(state.cropSession.rect, finished.startRect)
+      if (moved) store.set(commitCrop(state))
       return
     }
 

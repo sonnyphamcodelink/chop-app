@@ -134,4 +134,43 @@ describe('crop session', () => {
     })
     expect(currentDocument(undoState(committed)).cropRect).toBeNull()
   })
+
+  it('commitCrop is a no-op when the session rect matches the existing cropRect', () => {
+    const cropped = commitDocument(
+      createEditorState(base),
+      setCrop(base, { x: 10, y: 20, width: 100, height: 80 }),
+    )
+    const cropping = setCropSession(
+      setTool(cropped, 'crop'),
+      { x: 10, y: 20, width: 100, height: 80 },
+    )
+    const committed = commitCrop(cropping)
+    expect(committed.history.past).toHaveLength(cropping.history.past.length)
+    expect(committed).toEqual(cropping)
+  })
+
+  it('commitCrop is a no-op when cropRect is null and the session is the full image', () => {
+    const cropping = setTool(createEditorState(base), 'crop')
+    expect(cropping.cropSession?.rect).toEqual({ x: 0, y: 0, width: 800, height: 600 })
+    const committed = commitCrop(cropping)
+    expect(committed.history.past).toHaveLength(cropping.history.past.length)
+    expect(committed).toEqual(cropping)
+    expect(currentDocument(committed).cropRect).toBeNull()
+  })
+
+  it('commitCrop still commits when the session rect actually differs', () => {
+    const cropped = commitDocument(
+      createEditorState(base),
+      setCrop(base, { x: 10, y: 20, width: 100, height: 80 }),
+    )
+    const cropping = setCropSession(
+      setTool(cropped, 'crop'),
+      { x: 15, y: 20, width: 100, height: 80 },
+    )
+    const committed = commitCrop(cropping)
+    expect(committed.history.past).toHaveLength(cropping.history.past.length + 1)
+    expect(currentDocument(committed).cropRect).toEqual({
+      x: 15, y: 20, width: 100, height: 80,
+    })
+  })
 })
