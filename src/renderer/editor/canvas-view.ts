@@ -1,10 +1,12 @@
 import { backingScale, fitScale, viewToImage } from '@shared/canvas-mapping'
+import { fullImageRect } from '@shared/crop-session'
 import { outputSize } from '@shared/document'
 import type { EditorState } from '@shared/editor-state'
 import { currentDocument } from '@shared/editor-state'
 import type { Point } from '@shared/geometry'
+import { handleRects } from '@shared/hit-test'
 import { type CanvasFactory, renderDocument } from '@shared/render'
-import { cropDraftRect, documentWithDraft } from '@shared/tools'
+import { documentWithDraft } from '@shared/tools'
 
 export const browserCanvasFactory: CanvasFactory = (width, height) => {
   const canvas = document.createElement('canvas')
@@ -37,14 +39,44 @@ export function createCanvasView(canvas: HTMLCanvasElement): CanvasView {
     return ctx
   }
 
-  function drawCropDraft(ctx: CanvasRenderingContext2D, state: EditorState): void {
-    const rect = cropDraftRect(state.draft)
-    if (!rect) return
+  function drawCropSession(ctx: CanvasRenderingContext2D, state: EditorState, scale: number): void {
+    const session = state.cropSession
+    if (state.tool !== 'crop' || !session) return
+    const doc = currentDocument(state)
+    const bounds = fullImageRect(doc)
+    const { rect } = session
+
     ctx.save()
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.45)'
+    ctx.fillRect(bounds.x, bounds.y, bounds.width, Math.max(0, rect.y - bounds.y))
+    ctx.fillRect(
+      bounds.x,
+      rect.y + rect.height,
+      bounds.width,
+      Math.max(0, bounds.y + bounds.height - (rect.y + rect.height)),
+    )
+    ctx.fillRect(bounds.x, rect.y, Math.max(0, rect.x - bounds.x), rect.height)
+    ctx.fillRect(
+      rect.x + rect.width,
+      rect.y,
+      Math.max(0, bounds.x + bounds.width - (rect.x + rect.width)),
+      rect.height,
+    )
+
     ctx.strokeStyle = SELECTION_COLOR
-    ctx.lineWidth = 1 / currentScale
-    ctx.setLineDash([4 / currentScale, 3 / currentScale])
+    ctx.lineWidth = 1 / scale
+    ctx.setLineDash([4 / scale, 3 / scale])
     ctx.strokeRect(rect.x, rect.y, rect.width, rect.height)
+    ctx.setLineDash([])
+    ctx.fillStyle = SELECTION_COLOR
+    for (const handle of handleRects(rect)) {
+      ctx.fillRect(
+        handle.rect.x,
+        handle.rect.y,
+        handle.rect.width / scale,
+        handle.rect.height / scale,
+      )
+    }
     ctx.restore()
   }
 
@@ -55,7 +87,11 @@ export function createCanvasView(canvas: HTMLCanvasElement): CanvasView {
 
     render(state: EditorState): void {
       if (!image) return
-      const doc = documentWithDraft(currentDocument(state), state.draft, state.style)
+      const inCropSession = state.tool === 'crop' && !!state.cropSession
+      const baseDoc = currentDocument(state)
+      const doc = inCropSession
+        ? { ...baseDoc, cropRect: null }
+        : documentWithDraft(baseDoc, state.draft, state.style)
       const size = outputSize(doc)
       const parent = canvas.parentElement
       currentScale = fitScale(
@@ -79,7 +115,7 @@ export function createCanvasView(canvas: HTMLCanvasElement): CanvasView {
       ctx.save()
       ctx.scale(bufferScale, bufferScale)
       renderDocument(ctx, image, doc, browserCanvasFactory)
-      drawCropDraft(ctx, state)
+      drawCropSession(ctx, state, currentScale)
       ctx.restore()
     },
 
@@ -92,7 +128,11 @@ export function createCanvasView(canvas: HTMLCanvasElement): CanvasView {
     toImagePoint(event: MouseEvent, state: EditorState): Point {
       const rect = canvas.getBoundingClientRect()
       const local = { x: event.clientX - rect.left, y: event.clientY - rect.top }
-      return viewToImage(local, currentScale, currentDocument(state).cropRect)
+      const cropOrigin =
+        state.tool === 'crop' && state.cropSession
+          ? null
+          : currentDocument(state).cropRect
+      return viewToImage(local, currentScale, cropOrigin)
     },
 
     scale(): number {

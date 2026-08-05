@@ -3,7 +3,6 @@ import { createDocument } from '@shared/document'
 import { DEFAULT_FONT_SIZE, DEFAULT_STROKE_WIDTH } from '@shared/constants'
 import {
   beginDraft,
-  cropDraftRect,
   defaultStyle,
   documentWithDraft,
   draftToAnnotation,
@@ -134,19 +133,5 @@ describe('documentWithDraft', () => {
     const next = documentWithDraft(withBox, drag('arrow'), style)
     expect(next.annotations.map((a) => a.id)).toEqual(['existing', '__draft__'])
     expect(next.annotations[1]?.kind).toBe('arrow')
-  })
-})
-
-describe('cropDraftRect', () => {
-  it('returns a normalized rect for a crop draft', () => {
-    expect(cropDraftRect(drag('crop'))).toEqual({
-      x: 10, y: 10, width: 100, height: 80,
-    })
-  })
-
-  it('returns null when missing, wrong tool, or degenerate', () => {
-    expect(cropDraftRect(null)).toBeNull()
-    expect(cropDraftRect(drag('box'))).toBeNull()
-    expect(cropDraftRect(drag('crop', 11, 11))).toBeNull()
   })
 })

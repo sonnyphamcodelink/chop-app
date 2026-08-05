@@ -1,11 +1,15 @@
-import { addAnnotation, setCrop } from '@shared/document'
+import { addAnnotation } from '@shared/document'
+import { constrainCropRect, fullImageRect, initialCropRect, moveCropRect } from '@shared/crop-session'
 import {
+  commitCrop,
   commitDocument,
   currentDocument,
   type EditorState,
+  setCropSession,
   setDraft,
 } from '@shared/editor-state'
-import { isDegenerateRect, normalizeRect, type Point } from '@shared/geometry'
+import { type Point, rectContains } from '@shared/geometry'
+import { type HandleId, handleAtPoint, resizeRect } from '@shared/hit-test'
 import { beginDraft, draftToAnnotation, isDrawingTool, updateDraft } from '@shared/tools'
 import type { CanvasView } from './canvas-view'
 
@@ -16,7 +20,14 @@ export type Store = {
 
 type Gesture =
   | { readonly mode: 'draw' }
-  | { readonly mode: 'crop' }
+  | {
+      readonly mode: 'crop-resize'
+      readonly handle: HandleId
+    }
+  | {
+      readonly mode: 'crop-move'
+      readonly last: Point
+    }
 
 function newId(): string {
   return crypto.randomUUID()
@@ -39,9 +50,14 @@ export function attachInteractions(
       openTextInput(event, point)
       return
     }
-    if (state.tool === 'crop') {
-      gesture = { mode: 'crop' }
-      store.set(setDraft(state, beginDraft('crop', point)))
+    if (state.tool === 'crop' && state.cropSession) {
+      const { rect } = state.cropSession
+      const handle = handleAtPoint(rect, point)
+      if (handle) {
+        gesture = { mode: 'crop-resize', handle }
+      } else if (rectContains(rect, point)) {
+        gesture = { mode: 'crop-move', last: point }
+      }
       return
     }
     if (isDrawingTool(state.tool)) {
@@ -55,13 +71,31 @@ export function attachInteractions(
     const state = store.get()
     const point = view.toImagePoint(event, state)
 
-    if (state.draft) store.set(setDraft(state, updateDraft(state.draft, point)))
+    if (gesture.mode === 'draw') {
+      if (state.draft) store.set(setDraft(state, updateDraft(state.draft, point)))
+      return
+    }
+
+    if (!state.cropSession) return
+    const bounds = fullImageRect(currentDocument(state))
+
+    if (gesture.mode === 'crop-resize') {
+      const resized = resizeRect(state.cropSession.rect, gesture.handle, point)
+      store.set(setCropSession(state, constrainCropRect(resized, bounds)))
+      return
+    }
+
+    if (gesture.mode === 'crop-move') {
+      const dx = point.x - gesture.last.x
+      const dy = point.y - gesture.last.y
+      store.set(setCropSession(state, moveCropRect(state.cropSession.rect, dx, dy, bounds)))
+      gesture = { ...gesture, last: point }
+    }
   })
 
-  canvas.addEventListener('mouseup', (event) => {
+  canvas.addEventListener('mouseup', () => {
     if (!gesture) return
     const state = store.get()
-    const point = view.toImagePoint(event, state)
     const finished = gesture
     gesture = null
 
@@ -75,13 +109,8 @@ export function attachInteractions(
       return
     }
 
-    if (finished.mode === 'crop' && state.draft) {
-      const rect = normalizeRect(state.draft.start, point)
-      store.set(
-        isDegenerateRect(rect)
-          ? setDraft(state, null)
-          : commitDocument(state, setCrop(currentDocument(state), rect)),
-      )
+    if (finished.mode === 'crop-resize' || finished.mode === 'crop-move') {
+      store.set(commitCrop(state))
       return
     }
 
@@ -89,9 +118,14 @@ export function attachInteractions(
   })
 
   canvas.addEventListener('mouseleave', () => {
-    if (gesture) {
-      gesture = null
-      store.set(setDraft(store.get(), null))
+    if (!gesture) return
+    const isCrop = gesture.mode === 'crop-resize' || gesture.mode === 'crop-move'
+    gesture = null
+    const state = store.get()
+    if (isCrop) {
+      store.set(setCropSession(state, initialCropRect(currentDocument(state))))
+      return
     }
+    store.set(setDraft(state, null))
   })
 }
