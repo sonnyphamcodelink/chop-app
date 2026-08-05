@@ -46,17 +46,28 @@
       #filmstrip {
         flex: 0 0 auto;
         display: flex;
+        align-items: center;
         gap: 8px;
         padding: 8px 12px;
         overflow-x: auto;
+        overflow-y: hidden;
         border-top: 1px solid rgba(128, 128, 128, 0.3);
-        min-height: 76px;
+        /* Fixed so the strip never resizes with the captures it holds. */
+        height: 90px;
+        box-sizing: border-box;
       }
       #filmstrip img {
-        height: 56px;
+        /* Uniform tiles: every capture gets the same box, cropped to fill. */
+        width: 112px;
+        height: 72px;
+        object-fit: cover;
+        object-position: top center;
+        background: rgba(128, 128, 128, 0.15);
         border-radius: 4px;
         cursor: pointer;
         border: 2px solid transparent;
+        box-sizing: border-box;
+        flex: 0 0 auto;
       }
       #filmstrip img.active { border-color: #2f9bff; }
       #empty { margin: auto; opacity: 0.6; }

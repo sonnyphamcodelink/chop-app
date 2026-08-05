@@ -105,6 +105,7 @@ export function registerEditorHandlers(rootDir: string): void {
       dataUrl: `data:image/png;base64,${originalPng.toString('base64')}`,
       width: record.width,
       height: record.height,
+      scaleFactor: 1,
       createdAt: record.createdAt,
       documentJson,
     }

@@ -51,3 +51,7 @@ export function isDegenerateRect(rect: Rect): boolean {
 export function offsetRect(rect: Rect, dx: number, dy: number): Rect {
   return { ...rect, x: rect.x + dx, y: rect.y + dy }
 }
+
+export function rectsEqual(a: Rect, b: Rect): boolean {
+  return a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height
+}

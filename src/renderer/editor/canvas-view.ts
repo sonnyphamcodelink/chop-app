@@ -1,10 +1,12 @@
-import { fitScale, viewToImage } from '@shared/canvas-mapping'
+import { backingScale, fitScale, viewToImage } from '@shared/canvas-mapping'
+import { fullImageRect } from '@shared/crop-session'
 import { outputSize } from '@shared/document'
 import type { EditorState } from '@shared/editor-state'
 import { currentDocument } from '@shared/editor-state'
 import type { Point } from '@shared/geometry'
-import { annotationBounds, handleRects } from '@shared/hit-test'
+import { handleRects } from '@shared/hit-test'
 import { type CanvasFactory, renderDocument } from '@shared/render'
+import { documentWithDraft } from '@shared/tools'
 
 export const browserCanvasFactory: CanvasFactory = (width, height) => {
   const canvas = document.createElement('canvas')
@@ -26,8 +28,13 @@ export type CanvasView = {
 
 const SELECTION_COLOR = '#2f9bff'
 
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max)
+}
+
 export function createCanvasView(canvas: HTMLCanvasElement): CanvasView {
   let image: HTMLImageElement | null = null
+  /** CSS pixels per image pixel (on-screen size). Hit-testing uses this. */
   let currentScale = 1
 
   function ctx2d(): CanvasRenderingContext2D {
@@ -36,26 +43,52 @@ export function createCanvasView(canvas: HTMLCanvasElement): CanvasView {
     return ctx
   }
 
-  function drawSelection(ctx: CanvasRenderingContext2D, state: EditorState): void {
-    if (state.tool !== 'select' || !state.selectedId) return
-    const annotation = currentDocument(state).annotations.find(
-      (a) => a.id === state.selectedId,
-    )
-    if (!annotation) return
+  function drawCropSession(ctx: CanvasRenderingContext2D, state: EditorState, scale: number): void {
+    const session = state.cropSession
+    if (state.tool !== 'crop' || !session) return
+    const doc = currentDocument(state)
+    const bounds = fullImageRect(doc)
+    const { rect } = session
 
-    const bounds = annotationBounds(annotation)
     ctx.save()
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.45)'
+    ctx.fillRect(bounds.x, bounds.y, bounds.width, Math.max(0, rect.y - bounds.y))
+    ctx.fillRect(
+      bounds.x,
+      rect.y + rect.height,
+      bounds.width,
+      Math.max(0, bounds.y + bounds.height - (rect.y + rect.height)),
+    )
+    ctx.fillRect(bounds.x, rect.y, Math.max(0, rect.x - bounds.x), rect.height)
+    ctx.fillRect(
+      rect.x + rect.width,
+      rect.y,
+      Math.max(0, bounds.x + bounds.width - (rect.x + rect.width)),
+      rect.height,
+    )
+
     ctx.strokeStyle = SELECTION_COLOR
-    ctx.lineWidth = 1 / currentScale
-    ctx.setLineDash([4 / currentScale, 3 / currentScale])
-    ctx.strokeRect(bounds.x, bounds.y, bounds.width, bounds.height)
+    ctx.lineWidth = 1 / scale
+    ctx.setLineDash([4 / scale, 3 / scale])
+    ctx.strokeRect(rect.x, rect.y, rect.width, rect.height)
     ctx.setLineDash([])
     ctx.fillStyle = SELECTION_COLOR
-    for (const handle of handleRects(bounds)) {
-      ctx.fillRect(
-        handle.rect.x, handle.rect.y,
-        handle.rect.width / currentScale, handle.rect.height / currentScale,
+    for (const handle of handleRects(rect)) {
+      // Handles keep a constant on-screen size, and are nudged off the image
+      // edge so a frame at the boundary still shows a whole, grabbable square.
+      const w = handle.rect.width / scale
+      const h = handle.rect.height / scale
+      const cx = clamp(
+        handle.rect.x + handle.rect.width / 2,
+        bounds.x + w / 2,
+        bounds.x + bounds.width - w / 2,
       )
+      const cy = clamp(
+        handle.rect.y + handle.rect.height / 2,
+        bounds.y + h / 2,
+        bounds.y + bounds.height - h / 2,
+      )
+      ctx.fillRect(cx - w / 2, cy - h / 2, w, h)
     }
     ctx.restore()
   }
@@ -67,26 +100,35 @@ export function createCanvasView(canvas: HTMLCanvasElement): CanvasView {
 
     render(state: EditorState): void {
       if (!image) return
-      const doc = currentDocument(state)
+      const inCropSession = state.tool === 'crop' && !!state.cropSession
+      const baseDoc = currentDocument(state)
+      const doc = inCropSession
+        ? { ...baseDoc, cropRect: null }
+        : documentWithDraft(baseDoc, state.draft, state.style)
       const size = outputSize(doc)
       const parent = canvas.parentElement
       currentScale = fitScale(
         size.width, size.height,
         parent?.clientWidth ?? size.width,
         parent?.clientHeight ?? size.height,
+        doc.scaleFactor,
       )
+      const bufferScale = backingScale(currentScale, window.devicePixelRatio)
 
-      canvas.width = Math.max(1, Math.round(size.width * currentScale))
-      canvas.height = Math.max(1, Math.round(size.height * currentScale))
-      canvas.style.width = `${canvas.width}px`
-      canvas.style.height = `${canvas.height}px`
+      const cssWidth = Math.max(1, Math.round(size.width * currentScale))
+      const cssHeight = Math.max(1, Math.round(size.height * currentScale))
+      canvas.style.width = `${cssWidth}px`
+      canvas.style.height = `${cssHeight}px`
+      // Full-resolution backing store so DIP-sized CSS is not soft on Retina.
+      canvas.width = Math.max(1, Math.round(size.width * bufferScale))
+      canvas.height = Math.max(1, Math.round(size.height * bufferScale))
 
       const ctx = ctx2d()
       ctx.clearRect(0, 0, canvas.width, canvas.height)
       ctx.save()
-      ctx.scale(currentScale, currentScale)
+      ctx.scale(bufferScale, bufferScale)
       renderDocument(ctx, image, doc, browserCanvasFactory)
-      drawSelection(ctx, state)
+      drawCropSession(ctx, state, currentScale)
       ctx.restore()
     },
 
@@ -99,7 +141,11 @@ export function createCanvasView(canvas: HTMLCanvasElement): CanvasView {
     toImagePoint(event: MouseEvent, state: EditorState): Point {
       const rect = canvas.getBoundingClientRect()
       const local = { x: event.clientX - rect.left, y: event.clientY - rect.top }
-      return viewToImage(local, currentScale, currentDocument(state).cropRect)
+      const cropOrigin =
+        state.tool === 'crop' && state.cropSession
+          ? null
+          : currentDocument(state).cropRect
+      return viewToImage(local, currentScale, cropOrigin)
     },
 
     scale(): number {

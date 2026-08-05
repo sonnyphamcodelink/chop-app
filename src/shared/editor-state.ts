@@ -1,4 +1,5 @@
-import { type CaptureDocument, removeAnnotation } from './document'
+import { setCrop, type CaptureDocument } from './document'
+import { fullImageRect, initialCropRect } from './crop-session'
 import {
   createHistory,
   type History,
@@ -6,23 +7,25 @@ import {
   redo,
   undo,
 } from './history'
+import { rectsEqual, type Rect } from './geometry'
 import { type Draft, defaultStyle, type ToolId, type ToolStyle } from './tools'
 
 export type EditorState = {
   readonly history: History<CaptureDocument>
   readonly tool: ToolId
   readonly style: ToolStyle
-  readonly selectedId: string | null
   readonly draft: Draft | null
+  /** Working crop frame while Crop is active; null otherwise. */
+  readonly cropSession: { readonly rect: Rect } | null
 }
 
 export function createEditorState(doc: CaptureDocument): EditorState {
   return {
     history: createHistory(doc),
-    tool: 'select',
+    tool: 'box',
     style: defaultStyle(),
-    selectedId: null,
     draft: null,
+    cropSession: null,
   }
 }
 
@@ -31,12 +34,36 @@ export function currentDocument(state: EditorState): CaptureDocument {
 }
 
 export function setTool(state: EditorState, tool: ToolId): EditorState {
+  if (tool === 'crop') {
+    return {
+      ...state,
+      tool,
+      draft: null,
+      cropSession: { rect: initialCropRect(currentDocument(state)) },
+    }
+  }
+  return { ...state, tool, draft: null, cropSession: null }
+}
+
+export function setCropSession(state: EditorState, rect: Rect | null): EditorState {
   return {
     ...state,
-    tool,
-    // A selection only means something while the select tool is active.
-    selectedId: tool === 'select' ? state.selectedId : null,
-    draft: null,
+    cropSession: rect ? { rect } : null,
+  }
+}
+
+export function commitCrop(state: EditorState): EditorState {
+  if (!state.cropSession) return state
+  const rect = state.cropSession.rect
+  const doc = currentDocument(state)
+  const unchanged = doc.cropRect
+    ? rectsEqual(doc.cropRect, rect)
+    : rectsEqual(fullImageRect(doc), rect)
+  if (unchanged) return state
+  return {
+    ...commitDocument(state, setCrop(doc, rect)),
+    cropSession: { rect },
+    tool: 'crop',
   }
 }
 
@@ -48,30 +75,24 @@ export function setDraft(state: EditorState, draft: Draft | null): EditorState {
   return { ...state, draft }
 }
 
-/** Records an undoable change. */
 export function commitDocument(state: EditorState, doc: CaptureDocument): EditorState {
   return { ...state, history: pushHistory(state.history, doc), draft: null }
 }
 
-/** Replaces the present without touching history — used during a live drag. */
 export function previewDocument(state: EditorState, doc: CaptureDocument): EditorState {
   return { ...state, history: { ...state.history, present: doc } }
 }
 
-export function selectAnnotation(state: EditorState, id: string | null): EditorState {
-  return { ...state, selectedId: id }
-}
-
-export function deleteSelected(state: EditorState): EditorState {
-  if (!state.selectedId) return state
-  const next = removeAnnotation(currentDocument(state), state.selectedId)
-  return { ...commitDocument(state, next), selectedId: null }
-}
-
 export function undoState(state: EditorState): EditorState {
-  return { ...state, history: undo(state.history), selectedId: null, draft: null }
+  const history = undo(state.history)
+  const next = { ...state, history, draft: null }
+  if (next.tool !== 'crop') return { ...next, cropSession: null }
+  return { ...next, cropSession: { rect: initialCropRect(history.present) } }
 }
 
 export function redoState(state: EditorState): EditorState {
-  return { ...state, history: redo(state.history), selectedId: null, draft: null }
+  const history = redo(state.history)
+  const next = { ...state, history, draft: null }
+  if (next.tool !== 'crop') return { ...next, cropSession: null }
+  return { ...next, cropSession: { rect: initialCropRect(history.present) } }
 }

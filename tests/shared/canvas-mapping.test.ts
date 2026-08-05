@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { fitScale, viewToImage } from '@shared/canvas-mapping'
+import { backingScale, fitScale, viewToImage } from '@shared/canvas-mapping'
 
 describe('fitScale', () => {
   it('shrinks an image larger than the viewport', () => {
@@ -10,8 +10,17 @@ describe('fitScale', () => {
     expect(fitScale(1000, 2000, 1000, 1000)).toBe(0.5)
   })
 
-  it('never upscales a small image', () => {
+  it('never upscales a small image above on-screen 1:1', () => {
     expect(fitScale(100, 100, 1000, 1000)).toBe(1)
+  })
+
+  it('caps at DIP size so a Retina capture is not shown zoomed in', () => {
+    // 400×200 physical pixels from a 2× display were 200×100 DIPs on screen.
+    expect(fitScale(400, 200, 1000, 1000, 2)).toBe(0.5)
+  })
+
+  it('still shrinks when the DIP-sized image exceeds the viewport', () => {
+    expect(fitScale(4000, 2000, 1000, 1000, 2)).toBe(0.25)
   })
 
   it('returns a positive scale for a zero-size viewport', () => {
@@ -32,5 +41,20 @@ describe('viewToImage', () => {
   it('combines scale and crop origin', () => {
     const crop = { x: 100, y: 100, width: 400, height: 300 }
     expect(viewToImage({ x: 50, y: 50 }, 0.5, crop)).toEqual({ x: 200, y: 200 })
+  })
+})
+
+describe('backingScale', () => {
+  it('multiplies display scale by device pixel ratio for a sharp Retina canvas', () => {
+    // DIP display scale 0.5 on a 2× editor → 1 buffer pixel per image pixel.
+    expect(backingScale(0.5, 2)).toBe(1)
+  })
+
+  it('keeps a 1× display at the display scale', () => {
+    expect(backingScale(0.5, 1)).toBe(0.5)
+  })
+
+  it('treats a missing device pixel ratio as 1', () => {
+    expect(backingScale(0.5, 0)).toBe(0.5)
   })
 })

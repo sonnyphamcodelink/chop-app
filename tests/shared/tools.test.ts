@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
+import { createDocument } from '@shared/document'
 import { DEFAULT_FONT_SIZE, DEFAULT_STROKE_WIDTH } from '@shared/constants'
 import {
   beginDraft,
   defaultStyle,
+  documentWithDraft,
   draftToAnnotation,
   isDrawingTool,
   type ToolId,
@@ -79,7 +81,6 @@ describe('draftToAnnotation', () => {
 
   it('returns null for tools that do not produce annotations', () => {
     expect(draftToAnnotation(drag('crop'), style, 'a6')).toBeNull()
-    expect(draftToAnnotation(drag('select'), style, 'a7')).toBeNull()
     expect(draftToAnnotation(drag('text'), style, 'a8')).toBeNull()
   })
 })
@@ -90,8 +91,47 @@ describe('isDrawingTool', () => {
     expect(drawing.every(isDrawingTool)).toBe(true)
   })
 
-  it('excludes select, text, and crop', () => {
-    const other: readonly ToolId[] = ['select', 'text', 'crop']
+  it('excludes text and crop', () => {
+    const other: readonly ToolId[] = ['text', 'crop']
     expect(other.some(isDrawingTool)).toBe(false)
+  })
+})
+
+describe('documentWithDraft', () => {
+  const doc = createDocument('d', 200, 100)
+
+  it('appends a paint-only box annotation for a box draft', () => {
+    const next = documentWithDraft(doc, drag('box'), style)
+    expect(next.annotations).toHaveLength(1)
+    expect(next.annotations[0]).toMatchObject({
+      id: '__draft__',
+      kind: 'box',
+      rect: { x: 10, y: 10, width: 100, height: 80 },
+    })
+    expect(doc.annotations).toHaveLength(0)
+  })
+
+  it('returns the same document for null, degenerate, or crop drafts', () => {
+    expect(documentWithDraft(doc, null, style)).toBe(doc)
+    expect(documentWithDraft(doc, drag('box', 11, 11), style)).toBe(doc)
+    expect(documentWithDraft(doc, drag('crop'), style)).toBe(doc)
+  })
+
+  it('keeps existing annotations under the draft', () => {
+    const withBox = {
+      ...doc,
+      annotations: [
+        {
+          id: 'existing',
+          kind: 'box' as const,
+          rect: { x: 0, y: 0, width: 20, height: 20 },
+          color: '#000000',
+          strokeWidth: 2,
+        },
+      ],
+    }
+    const next = documentWithDraft(withBox, drag('arrow'), style)
+    expect(next.annotations.map((a) => a.id)).toEqual(['existing', '__draft__'])
+    expect(next.annotations[1]?.kind).toBe('arrow')
   })
 })

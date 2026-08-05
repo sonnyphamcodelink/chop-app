@@ -1,5 +1,5 @@
 import { _electron as electron, type ElectronApplication, expect, test } from '@playwright/test'
-import { mkdtemp, readdir, rm } from 'node:fs/promises'
+import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -98,6 +98,59 @@ test('drawing a box is undoable and lands in the saved document', async () => {
   await page.keyboard.press('Meta+z')
   // The tool stays selected after an undo; only the document changes.
   await expect(page.getByRole('button', { name: 'Box' })).toHaveClass(/active/)
+})
+
+/** The crop rect of the most recently written document sidecar, if any. */
+async function savedCropRect(): Promise<unknown> {
+  const dir = join(captureRoot, '.chop', 'docs')
+  const files = (await readdir(dir).catch(() => [] as string[])).filter((f) =>
+    f.endsWith('.json'),
+  )
+  const name = files.sort().at(-1)
+  if (!name) return undefined
+  return JSON.parse(await readFile(join(dir, name), 'utf8')).cropRect
+}
+
+test('Enter saves a crop and Escape abandons it', async () => {
+  await sendCapture({
+    id: 'e2e-4',
+    dataUrl: ONE_PIXEL_PNG,
+    width: 400,
+    height: 300,
+    createdAt: new Date().toISOString(),
+  })
+
+  const page = await app.firstWindow()
+  await expect(page.locator('#empty')).toBeHidden()
+
+  const canvas = page.locator('#canvas')
+  const box = await canvas.boundingBox()
+  if (!box) throw new Error('canvas has no bounding box')
+
+  /** Drags the south-east crop handle 100px in from the bottom-right corner. */
+  async function dragCornerInward(): Promise<void> {
+    await page.getByRole('button', { name: 'Crop' }).click()
+    await page.mouse.move(box!.x + box!.width - 2, box!.y + box!.height - 2)
+    await page.mouse.down()
+    await page.mouse.move(box!.x + box!.width - 100, box!.y + box!.height - 100)
+    await page.mouse.up()
+  }
+
+  await dragCornerInward()
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('button', { name: 'Crop' })).not.toHaveClass(/active/)
+  // Outlast the autosave debounce: an abandoned crop must never reach disk.
+  await page.waitForTimeout(2000)
+  expect(await savedCropRect()).toBeNull()
+
+  await dragCornerInward()
+  await page.keyboard.press('Enter')
+  await expect(page.getByRole('button', { name: 'Crop' })).not.toHaveClass(/active/)
+  await expect
+    .poll(async () => (await savedCropRect()) as { width?: number } | null, {
+      timeout: 10_000,
+    })
+    .toMatchObject({ width: expect.any(Number) })
 })
 
 test('the tray keeps the app alive after the editor closes', async () => {

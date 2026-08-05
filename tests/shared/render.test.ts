@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { PIXELATE_BLOCK_SIZE } from '@shared/constants'
 import { addAnnotation, type Annotation, createDocument, setCrop } from '@shared/document'
 import { type CanvasFactory, renderDocument } from '@shared/render'
+import { beginDraft, documentWithDraft, updateDraft } from '@shared/tools'
 import { createMockContext, opNames } from '../helpers/mock-context'
 
 const image = {} as CanvasImageSource
@@ -114,5 +115,18 @@ describe('renderDocument', () => {
     expect(names.filter((n) => n === 'save').length).toBe(
       names.filter((n) => n === 'restore').length,
     )
+  })
+
+  it('paints a draft box on top when the document includes documentWithDraft', () => {
+    const { ctx, ops } = createMockContext()
+    const style = { color: '#ff3b30', strokeWidth: 3, fontSize: 18 }
+    const draft = updateDraft(beginDraft('box', { x: 10, y: 10 }), { x: 110, y: 90 })
+    const doc = documentWithDraft(createDocument('d', 800, 600), draft, style)
+    renderDocument(ctx, image, doc, factory())
+    expect(ops).toContainEqual({ name: 'strokeRect', args: [10, 10, 100, 80] })
+    const imageIdx = ops.findIndex((op) => op.name === 'drawImage')
+    const strokeIdx = ops.findIndex((op) => op.name === 'strokeRect')
+    expect(imageIdx).toBeGreaterThanOrEqual(0)
+    expect(strokeIdx).toBeGreaterThan(imageIdx)
   })
 })

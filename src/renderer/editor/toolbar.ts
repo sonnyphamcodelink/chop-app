@@ -1,7 +1,11 @@
+import {
+  DEFAULT_STROKE_WIDTH,
+  STROKE_WIDTH_MAX,
+  STROKE_WIDTH_MIN,
+} from '@shared/constants'
 import type { ToolId } from '@shared/tools'
 
 const TOOLS: readonly { readonly id: ToolId; readonly label: string; readonly key: string }[] = [
-  { id: 'select', label: 'Select', key: 'V' },
   { id: 'box', label: 'Box', key: 'B' },
   { id: 'arrow', label: 'Arrow', key: 'A' },
   { id: 'text', label: 'Text', key: 'T' },
@@ -53,9 +57,9 @@ export function createToolbar(
 
   const width = document.createElement('input')
   width.type = 'range'
-  width.min = '1'
-  width.max = '12'
-  width.value = '3'
+  width.min = String(STROKE_WIDTH_MIN)
+  width.max = String(STROKE_WIDTH_MAX)
+  width.value = String(DEFAULT_STROKE_WIDTH)
   width.title = 'Stroke width'
   width.addEventListener('input', () => handlers.onStrokeWidth(Number(width.value)))
   root.append(width)

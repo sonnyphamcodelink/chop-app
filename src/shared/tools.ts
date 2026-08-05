@@ -1,8 +1,8 @@
 import { DEFAULT_FONT_SIZE, DEFAULT_STROKE_WIDTH } from './constants'
-import type { Annotation } from './document'
+import type { Annotation, CaptureDocument } from './document'
 import { isDegenerateRect, normalizeRect, type Point } from './geometry'
 
-export type ToolId = 'select' | 'box' | 'arrow' | 'text' | 'highlight' | 'blur' | 'crop'
+export type ToolId = 'box' | 'arrow' | 'text' | 'highlight' | 'blur' | 'crop'
 
 export type ToolStyle = {
   readonly color: string
@@ -41,7 +41,7 @@ export function isDrawingTool(tool: ToolId): boolean {
 
 /**
  * Converts a completed drag into an annotation, or null when the drag is too
- * small or the tool handles its own interaction (text, crop, select).
+ * small or the tool handles its own interaction (text, crop).
  */
 export function draftToAnnotation(
   draft: Draft,
@@ -68,4 +68,18 @@ export function draftToAnnotation(
     default:
       return null
   }
+}
+
+const DRAFT_ANNOTATION_ID = '__draft__'
+
+/** Temporary top annotation for on-screen paint. Never commit this id into history. */
+export function documentWithDraft(
+  doc: CaptureDocument,
+  draft: Draft | null,
+  style: ToolStyle,
+): CaptureDocument {
+  if (!draft) return doc
+  const annotation = draftToAnnotation(draft, style, DRAFT_ANNOTATION_ID)
+  if (!annotation) return doc
+  return { ...doc, annotations: [...doc.annotations, annotation] }
 }

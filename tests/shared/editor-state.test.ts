@@ -1,17 +1,17 @@
 import { describe, expect, it } from 'vitest'
-import { addAnnotation, type Annotation, createDocument } from '@shared/document'
+import { addAnnotation, type Annotation, createDocument, setCrop } from '@shared/document'
 import {
+  commitCrop,
   commitDocument,
   createEditorState,
   currentDocument,
-  deleteSelected,
   previewDocument,
-  redoState,
-  selectAnnotation,
+  setCropSession,
   setDraft,
   setStyle,
   setTool,
   undoState,
+  redoState,
 } from '@shared/editor-state'
 import { beginDraft } from '@shared/tools'
 
@@ -24,28 +24,20 @@ const box: Annotation = {
 const base = createDocument('d', 800, 600)
 
 describe('createEditorState', () => {
-  it('starts on the select tool with nothing selected', () => {
+  it('starts on the box tool with no draft', () => {
     const state = createEditorState(base)
-    expect(state.tool).toBe('select')
-    expect(state.selectedId).toBeNull()
+    expect(state.tool).toBe('box')
     expect(state.draft).toBeNull()
     expect(currentDocument(state)).toEqual(base)
   })
 })
 
 describe('setTool', () => {
-  it('switches the active tool', () => {
-    expect(setTool(createEditorState(base), 'arrow').tool).toBe('arrow')
-  })
-
-  it('clears the selection when leaving the select tool', () => {
-    const selected = selectAnnotation(createEditorState(base), 'b1')
-    expect(setTool(selected, 'box').selectedId).toBeNull()
-  })
-
-  it('keeps the selection when staying on select', () => {
-    const selected = selectAnnotation(createEditorState(base), 'b1')
-    expect(setTool(selected, 'select').selectedId).toBe('b1')
+  it('switches the active tool and clears the draft', () => {
+    const drafted = setDraft(createEditorState(base), beginDraft('box', { x: 1, y: 1 }))
+    const next = setTool(drafted, 'arrow')
+    expect(next.tool).toBe('arrow')
+    expect(next.draft).toBeNull()
   })
 })
 
@@ -84,34 +76,101 @@ describe('commitDocument vs previewDocument', () => {
   })
 })
 
-describe('deleteSelected', () => {
-  it('removes the selected annotation and clears the selection', () => {
-    const withBox = commitDocument(createEditorState(base), addAnnotation(base, box))
-    const state = deleteSelected(selectAnnotation(withBox, 'b1'))
-    expect(currentDocument(state).annotations).toHaveLength(0)
-    expect(state.selectedId).toBeNull()
-  })
-
-  it('is undoable', () => {
-    const withBox = commitDocument(createEditorState(base), addAnnotation(base, box))
-    const deleted = deleteSelected(selectAnnotation(withBox, 'b1'))
-    expect(currentDocument(undoState(deleted)).annotations).toHaveLength(1)
-  })
-
-  it('is a no-op when nothing is selected', () => {
-    const withBox = commitDocument(createEditorState(base), addAnnotation(base, box))
-    expect(deleteSelected(withBox)).toEqual(withBox)
-  })
-})
-
 describe('undoState / redoState', () => {
   it('round-trips a commit', () => {
     const state = commitDocument(createEditorState(base), addAnnotation(base, box))
     expect(currentDocument(redoState(undoState(state)))).toEqual(currentDocument(state))
   })
 
-  it('clears the selection on undo so no stale id remains', () => {
-    const withBox = commitDocument(createEditorState(base), addAnnotation(base, box))
-    expect(undoState(selectAnnotation(withBox, 'b1')).selectedId).toBeNull()
+  it('clears the draft on undo', () => {
+    const drafted = setDraft(
+      commitDocument(createEditorState(base), addAnnotation(base, box)),
+      beginDraft('box', { x: 1, y: 1 }),
+    )
+    expect(undoState(drafted).draft).toBeNull()
+  })
+})
+
+describe('crop session', () => {
+  it('starts a full-image session when entering crop with no cropRect', () => {
+    const state = setTool(createEditorState(base), 'crop')
+    expect(state.cropSession?.rect).toEqual({ x: 0, y: 0, width: 800, height: 600 })
+  })
+
+  it('starts from the committed cropRect when present', () => {
+    const cropped = commitDocument(
+      createEditorState(base),
+      setCrop(base, { x: 10, y: 20, width: 100, height: 80 }),
+    )
+    expect(setTool(cropped, 'crop').cropSession?.rect).toEqual({
+      x: 10, y: 20, width: 100, height: 80,
+    })
+  })
+
+  it('clears the session when leaving crop', () => {
+    const cropping = setTool(createEditorState(base), 'crop')
+    expect(setTool(cropping, 'box').cropSession).toBeNull()
+  })
+
+  it('updates the working rect without touching history', () => {
+    const cropping = setTool(createEditorState(base), 'crop')
+    const next = setCropSession(cropping, { x: 5, y: 5, width: 50, height: 40 })
+    expect(next.cropSession?.rect).toEqual({ x: 5, y: 5, width: 50, height: 40 })
+    expect(next.history.past).toHaveLength(0)
+    expect(currentDocument(next).cropRect).toBeNull()
+  })
+
+  it('commitCrop writes cropRect and keeps the session on that rect', () => {
+    const cropping = setCropSession(
+      setTool(createEditorState(base), 'crop'),
+      { x: 5, y: 5, width: 50, height: 40 },
+    )
+    const committed = commitCrop(cropping)
+    expect(currentDocument(committed).cropRect).toEqual({
+      x: 5, y: 5, width: 50, height: 40,
+    })
+    expect(committed.cropSession?.rect).toEqual({
+      x: 5, y: 5, width: 50, height: 40,
+    })
+    expect(currentDocument(undoState(committed)).cropRect).toBeNull()
+  })
+
+  it('commitCrop is a no-op when the session rect matches the existing cropRect', () => {
+    const cropped = commitDocument(
+      createEditorState(base),
+      setCrop(base, { x: 10, y: 20, width: 100, height: 80 }),
+    )
+    const cropping = setCropSession(
+      setTool(cropped, 'crop'),
+      { x: 10, y: 20, width: 100, height: 80 },
+    )
+    const committed = commitCrop(cropping)
+    expect(committed.history.past).toHaveLength(cropping.history.past.length)
+    expect(committed).toEqual(cropping)
+  })
+
+  it('commitCrop is a no-op when cropRect is null and the session is the full image', () => {
+    const cropping = setTool(createEditorState(base), 'crop')
+    expect(cropping.cropSession?.rect).toEqual({ x: 0, y: 0, width: 800, height: 600 })
+    const committed = commitCrop(cropping)
+    expect(committed.history.past).toHaveLength(cropping.history.past.length)
+    expect(committed).toEqual(cropping)
+    expect(currentDocument(committed).cropRect).toBeNull()
+  })
+
+  it('commitCrop still commits when the session rect actually differs', () => {
+    const cropped = commitDocument(
+      createEditorState(base),
+      setCrop(base, { x: 10, y: 20, width: 100, height: 80 }),
+    )
+    const cropping = setCropSession(
+      setTool(cropped, 'crop'),
+      { x: 15, y: 20, width: 100, height: 80 },
+    )
+    const committed = commitCrop(cropping)
+    expect(committed.history.past).toHaveLength(cropping.history.past.length + 1)
+    expect(currentDocument(committed).cropRect).toEqual({
+      x: 15, y: 20, width: 100, height: 80,
+    })
   })
 })
