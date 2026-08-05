@@ -1,6 +1,6 @@
 import { DEFAULT_FONT_SIZE, DEFAULT_STROKE_WIDTH } from './constants'
-import type { Annotation } from './document'
-import { isDegenerateRect, normalizeRect, type Point } from './geometry'
+import type { Annotation, CaptureDocument } from './document'
+import { isDegenerateRect, normalizeRect, type Point, type Rect } from './geometry'
 
 export type ToolId = 'select' | 'box' | 'arrow' | 'text' | 'highlight' | 'blur' | 'crop'
 
@@ -68,4 +68,25 @@ export function draftToAnnotation(
     default:
       return null
   }
+}
+
+const DRAFT_ANNOTATION_ID = '__draft__'
+
+/** Temporary top annotation for on-screen paint. Never commit this id into history. */
+export function documentWithDraft(
+  doc: CaptureDocument,
+  draft: Draft | null,
+  style: ToolStyle,
+): CaptureDocument {
+  if (!draft) return doc
+  const annotation = draftToAnnotation(draft, style, DRAFT_ANNOTATION_ID)
+  if (!annotation) return doc
+  return { ...doc, annotations: [...doc.annotations, annotation] }
+}
+
+/** Crop chrome rect for the editor canvas; null when not a paintable crop draft. */
+export function cropDraftRect(draft: Draft | null): Rect | null {
+  if (!draft || draft.tool !== 'crop') return null
+  const rect = normalizeRect(draft.start, draft.current)
+  return isDegenerateRect(rect) ? null : rect
 }
