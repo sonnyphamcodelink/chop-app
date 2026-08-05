@@ -7,8 +7,11 @@ export const AUTOSAVE_DEBOUNCE_MS = 800
 /** Longest edge of a filmstrip thumbnail, in pixels. */
 export const THUMBNAIL_SIZE = 256
 
-/** Mosaic block size used by the blur (pixelate) tool, in image pixels. */
-export const PIXELATE_BLOCK_SIZE = 12
+/**
+ * Edge length, in image pixels, of the grid a blur region is downsampled to.
+ * This is the redaction: detail below this size is thrown away, not smeared.
+ */
+export const BLUR_SAMPLE_SIZE = 12
 
 /** Longest the window provider may run before capture degrades to region-only. */
 export const WINDOW_PROVIDER_TIMEOUT_MS = 1500

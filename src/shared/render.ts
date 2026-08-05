@@ -1,4 +1,4 @@
-import { PIXELATE_BLOCK_SIZE } from './constants'
+import { BLUR_SAMPLE_SIZE } from './constants'
 import type {
   Annotation,
   ArrowAnnotation,
@@ -17,6 +17,11 @@ export type CanvasFactory = (
 
 const HIGHLIGHT_ALPHA = 0.4
 const ARROW_HEAD_RATIO = 4
+
+/** Gaussian softening laid over the downsample, in image pixels. */
+const BLUR_SOFTEN_PX = 8
+/** Frosted-glass wash, so a redacted region reads as light rather than a dark smear. */
+const BLUR_WASH_COLOR = 'rgba(255, 255, 255, 0.65)'
 
 function drawBox(ctx: CanvasRenderingContext2D, box: BoxAnnotation): void {
   ctx.strokeStyle = box.color
@@ -82,9 +87,11 @@ function drawText(ctx: CanvasRenderingContext2D, text: TextAnnotation): void {
 }
 
 /**
- * Redaction by mosaic, not gaussian: the region is downscaled to blocks and
- * scaled back up with smoothing off, which discards the original detail rather
- * than merely spreading it.
+ * Redaction first, looks second. The region is downsampled to a coarse grid,
+ * which is what actually destroys the detail — no amount of sharpening brings
+ * back text that was never kept. Everything after that is cosmetic: the grid is
+ * smoothed back up, softened, and washed with white so the result reads as
+ * frosted glass rather than a dark mosaic.
  */
 function drawBlur(
   ctx: CanvasRenderingContext2D,
@@ -93,24 +100,35 @@ function drawBlur(
   createCanvas: CanvasFactory,
 ): void {
   const { rect } = blur
-  const blocksWide = Math.max(1, Math.round(rect.width / PIXELATE_BLOCK_SIZE))
-  const blocksHigh = Math.max(1, Math.round(rect.height / PIXELATE_BLOCK_SIZE))
+  const samplesWide = Math.max(1, Math.round(rect.width / BLUR_SAMPLE_SIZE))
+  const samplesHigh = Math.max(1, Math.round(rect.height / BLUR_SAMPLE_SIZE))
 
-  const small = createCanvas(blocksWide, blocksHigh)
-  small.ctx.imageSmoothingEnabled = false
+  const small = createCanvas(samplesWide, samplesHigh)
+  small.ctx.imageSmoothingEnabled = true
   small.ctx.drawImage(
     image,
     rect.x, rect.y, rect.width, rect.height,
-    0, 0, blocksWide, blocksHigh,
+    0, 0, samplesWide, samplesHigh,
   )
 
   ctx.save()
-  ctx.imageSmoothingEnabled = false
+  // Clip to the region, then paint past it: a gaussian drawn flush to the edge
+  // samples the transparency outside and would leave the original showing
+  // through a feathered border.
+  ctx.beginPath()
+  ctx.rect(rect.x, rect.y, rect.width, rect.height)
+  ctx.clip()
+  ctx.imageSmoothingEnabled = true
+  ctx.filter = `blur(${BLUR_SOFTEN_PX}px)`
+  const bleed = BLUR_SOFTEN_PX * 2
   ctx.drawImage(
     small.canvas,
-    0, 0, blocksWide, blocksHigh,
-    rect.x, rect.y, rect.width, rect.height,
+    0, 0, samplesWide, samplesHigh,
+    rect.x - bleed, rect.y - bleed, rect.width + bleed * 2, rect.height + bleed * 2,
   )
+  ctx.filter = 'none'
+  ctx.fillStyle = BLUR_WASH_COLOR
+  ctx.fillRect(rect.x, rect.y, rect.width, rect.height)
   ctx.restore()
 }
 

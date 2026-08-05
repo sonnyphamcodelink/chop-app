@@ -43,6 +43,9 @@ export function createMockContext(): MockContext {
     set imageSmoothingEnabled(value: boolean) {
       ops.push({ name: 'set:imageSmoothingEnabled', args: [value] })
     },
+    set filter(value: string) {
+      ops.push({ name: 'set:filter', args: [value] })
+    },
     set strokeStyle(value: string) {
       ops.push({ name: 'set:strokeStyle', args: [value] })
     },

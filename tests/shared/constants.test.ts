@@ -14,7 +14,7 @@ describe('constants', () => {
       'HISTORY_LIMIT',
       'AUTOSAVE_DEBOUNCE_MS',
       'THUMBNAIL_SIZE',
-      'PIXELATE_BLOCK_SIZE',
+      'BLUR_SAMPLE_SIZE',
       'WINDOW_PROVIDER_TIMEOUT_MS',
       'MIN_WINDOW_DIMENSION',
       'MIN_SELECTION_DIMENSION',
