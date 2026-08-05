@@ -70,12 +70,11 @@ export function createCanvasView(canvas: HTMLCanvasElement): CanvasView {
     ctx.setLineDash([])
     ctx.fillStyle = SELECTION_COLOR
     for (const handle of handleRects(rect)) {
-      ctx.fillRect(
-        handle.rect.x,
-        handle.rect.y,
-        handle.rect.width / scale,
-        handle.rect.height / scale,
-      )
+      const w = handle.rect.width / scale
+      const h = handle.rect.height / scale
+      const cx = handle.rect.x + handle.rect.width / 2
+      const cy = handle.rect.y + handle.rect.height / 2
+      ctx.fillRect(cx - w / 2, cy - h / 2, w, h)
     }
     ctx.restore()
   }
