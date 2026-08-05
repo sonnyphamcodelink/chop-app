@@ -3,9 +3,73 @@
   <head>
     <meta charset="utf-8" />
     <title>Chop</title>
+    <style>
+      :root { color-scheme: light dark; }
+      html, body {
+        margin: 0;
+        height: 100%;
+        font: 13px -apple-system, system-ui, sans-serif;
+        user-select: none;
+      }
+      body { display: flex; flex-direction: column; }
+      #toolbar {
+        display: flex;
+        gap: 6px;
+        align-items: center;
+        padding: 8px 12px;
+        border-bottom: 1px solid rgba(128, 128, 128, 0.3);
+        flex: 0 0 auto;
+      }
+      #toolbar button { padding: 5px 10px; border-radius: 6px; cursor: pointer; }
+      #toolbar .tool.active { background: #2f9bff; color: #fff; }
+      .swatches { display: flex; gap: 4px; margin-left: 8px; }
+      .swatch { width: 18px; height: 18px; border-radius: 50%; border: 1px solid #8888; padding: 0; }
+      #stage {
+        flex: 1 1 auto;
+        display: grid;
+        place-items: center;
+        overflow: auto;
+        padding: 16px;
+        background: rgba(128, 128, 128, 0.12);
+        position: relative;
+      }
+      #canvas { box-shadow: 0 2px 12px rgba(0, 0, 0, 0.25); }
+      #text-input {
+        position: absolute;
+        display: none;
+        border: 1px solid #2f9bff;
+        background: rgba(255, 255, 255, 0.92);
+        color: #000;
+        padding: 2px 4px;
+        outline: none;
+      }
+      #filmstrip {
+        flex: 0 0 auto;
+        display: flex;
+        gap: 8px;
+        padding: 8px 12px;
+        overflow-x: auto;
+        border-top: 1px solid rgba(128, 128, 128, 0.3);
+        min-height: 76px;
+      }
+      #filmstrip img {
+        height: 56px;
+        border-radius: 4px;
+        cursor: pointer;
+        border: 2px solid transparent;
+      }
+      #filmstrip img.active { border-color: #2f9bff; }
+      #empty { margin: auto; opacity: 0.6; }
+    </style>
   </head>
   <body>
-    <h1>Chop</h1>
+    <div id="toolbar"></div>
+    <div id="stage">
+      <canvas id="canvas"></canvas>
+      <input id="text-input" />
+      <div id="empty">Press ⌘⇧2 to capture</div>
+    </div>
+    <div id="filmstrip"></div>
     <script type="module" src="./main.ts"></script>
   </body>
 </html>
