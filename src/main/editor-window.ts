@@ -13,7 +13,11 @@ export function getEditorWindow(): BrowserWindow {
     height: 800,
     show: false,
     title: 'Chop',
-    webPreferences: { preload: join(import.meta.dirname, '../preload/editor.mjs') },
+    // package.json is "type": "module", so preload is ESM — sandbox must be off.
+    webPreferences: {
+      preload: join(import.meta.dirname, '../preload/editor.mjs'),
+      sandbox: false,
+    },
   })
 
   if (process.env.ELECTRON_RENDERER_URL) {

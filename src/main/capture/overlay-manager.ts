@@ -25,7 +25,11 @@ function createOverlayWindow(display: DisplayInfo): BrowserWindow {
     show: false,
     acceptFirstMouse: true,
     enableLargerThanScreen: true,
-    webPreferences: { preload: join(import.meta.dirname, '../preload/overlay.mjs') },
+    // package.json is "type": "module", so preload is ESM — sandbox must be off.
+    webPreferences: {
+      preload: join(import.meta.dirname, '../preload/overlay.mjs'),
+      sandbox: false,
+    },
   })
 
   // Keep the overlay above app windows, but below macOS privacy prompts. Using

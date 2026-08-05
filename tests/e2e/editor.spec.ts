@@ -29,10 +29,13 @@ async function sendCapture(capture: Capture): Promise<void> {
 
 test.beforeEach(async () => {
   captureRoot = await mkdtemp(join(tmpdir(), 'chop-e2e-'))
+  // Cursor/agent shells may set ELECTRON_RUN_AS_NODE=1, which makes Electron
+  // reject Playwright's --remote-debugging-port and fail to launch.
+  const { ELECTRON_RUN_AS_NODE: _ignored, ...env } = process.env
   app = await electron.launch({
     args: ['out/main/index.js'],
     env: {
-      ...process.env,
+      ...env,
       CHOP_CAPTURE_ROOT: captureRoot,
       CHOP_STUB_WINDOWS: '[]',
     },
@@ -40,7 +43,7 @@ test.beforeEach(async () => {
 })
 
 test.afterEach(async () => {
-  await app.close()
+  await app?.close()
   await rm(captureRoot, { recursive: true, force: true })
 })
 
