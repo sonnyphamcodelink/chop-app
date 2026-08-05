@@ -1,6 +1,6 @@
 import { nativeImage } from 'electron'
 import { randomUUID } from 'node:crypto'
-import { selectionToPhysical } from '@shared/coords'
+import { dipToPhysical } from '@shared/coords'
 import { clampRect, rectArea } from '@shared/geometry'
 import type { CaptureResult, OverlaySelection } from '@shared/ipc'
 import type { DisplayCapture } from './capture-service'
@@ -21,7 +21,14 @@ export function cropCapture(
   // do not exist, which matters at fractional display scale factors.
   const imageSize = image.getSize()
   const imageBounds = { x: 0, y: 0, width: imageSize.width, height: imageSize.height }
-  const physical = clampRect(selectionToPhysical(selection.rect, capture.display), imageBounds)
+  const displayBounds = {
+    x: 0,
+    y: 0,
+    width: capture.display.bounds.width,
+    height: capture.display.bounds.height,
+  }
+  const localSelection = clampRect(selection.rect, displayBounds)
+  const physical = clampRect(dipToPhysical(localSelection, capture.display.scaleFactor), imageBounds)
   if (rectArea(physical) === 0) return null
 
   const output = image.crop(physical)

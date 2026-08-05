@@ -15,6 +15,7 @@ const cutout = document.querySelector<HTMLDivElement>('#cutout')!
 const label = document.querySelector<HTMLDivElement>('#label')!
 const veil = document.querySelector<HTMLDivElement>('#veil')!
 const hint = document.querySelector<HTMLDivElement>('#hint')!
+const inputLayer = document.querySelector<HTMLDivElement>('#input-layer')!
 
 let state: OverlayInit | null = null
 let dragOrigin: Point | null = null
@@ -64,8 +65,13 @@ bridge.onInit((init) => {
   frozen.src = init.dataUrl
 })
 
-document.addEventListener('mousemove', (event) => {
-  const point = { x: event.clientX, y: event.clientY }
+function pointerPoint(event: PointerEvent): Point {
+  return { x: event.clientX, y: event.clientY }
+}
+
+inputLayer.addEventListener('pointermove', (event) => {
+  event.preventDefault()
+  const point = pointerPoint(event)
   if (!dragOrigin) {
     highlightWindowAt(point)
     return
@@ -75,24 +81,38 @@ document.addEventListener('mousemove', (event) => {
   showRect(rect, `${Math.round(rect.width)} × ${Math.round(rect.height)}`)
 })
 
-document.addEventListener('mousedown', (event) => {
-  if (event.button !== 0) return
-  dragOrigin = { x: event.clientX, y: event.clientY }
+inputLayer.addEventListener('pointerdown', (event) => {
+  if (event.button !== 0 || !event.isPrimary) return
+  event.preventDefault()
+  inputLayer.setPointerCapture(event.pointerId)
+  dragOrigin = pointerPoint(event)
 })
 
-document.addEventListener('mouseup', (event) => {
-  if (event.button !== 0 || !dragOrigin) return
-  const rect = normalizeRect(dragOrigin, { x: event.clientX, y: event.clientY })
+inputLayer.addEventListener('pointerup', (event) => {
+  if (event.button !== 0 || !event.isPrimary || !dragOrigin) return
+  event.preventDefault()
+  if (inputLayer.hasPointerCapture(event.pointerId)) {
+    inputLayer.releasePointerCapture(event.pointerId)
+  }
+  const point = pointerPoint(event)
+  const rect = normalizeRect(dragOrigin, point)
   dragOrigin = null
 
   // A drag too small to be a region is a click: take the window underneath.
   if (isDegenerateRect(rect)) {
-    highlightWindowAt({ x: event.clientX, y: event.clientY })
+    highlightWindowAt(point)
     if (currentRect) commit(currentRect, 'window')
     return
   }
   commit(rect, 'region')
 })
+
+inputLayer.addEventListener('pointercancel', () => {
+  dragOrigin = null
+  clearRect()
+})
+
+frozen.addEventListener('dragstart', (event) => event.preventDefault())
 
 document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape') bridge.cancel()

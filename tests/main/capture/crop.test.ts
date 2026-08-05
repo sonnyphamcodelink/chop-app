@@ -1,15 +1,19 @@
 import { describe, expect, it, vi } from 'vitest'
 
 const cropped = { width: 400, height: 200 }
+const cropRects: { x: number; y: number; width: number; height: number }[] = []
 
 vi.mock('electron', () => ({
   nativeImage: {
     createFromDataURL: (url: string) => ({
       isEmpty: () => url === 'data:empty',
-      crop: (rect: { width: number; height: number }) => ({
-        getSize: () => ({ width: rect.width, height: rect.height }),
-        toDataURL: () => 'data:cropped',
-      }),
+      crop: (rect: { x: number; y: number; width: number; height: number }) => {
+        cropRects.push(rect)
+        return {
+          getSize: () => ({ width: rect.width, height: rect.height }),
+          toDataURL: () => 'data:cropped',
+        }
+      },
       getSize: () => ({ width: 3024, height: 1964 }),
     }),
   },
@@ -24,6 +28,7 @@ const capture = {
 
 describe('cropCapture', () => {
   it('scales a DIP selection to physical pixels before cropping', () => {
+    cropRects.length = 0
     const result = cropCapture(capture, {
       displayId: 1,
       rect: { x: 100, y: 50, width: 200, height: 100 },
@@ -33,6 +38,22 @@ describe('cropCapture', () => {
     expect(result?.width).toBe(cropped.width)
     expect(result?.height).toBe(cropped.height)
     expect(result?.dataUrl).toBe('data:cropped')
+    expect(cropRects.at(-1)).toEqual({ x: 200, y: 100, width: 400, height: 200 })
+  })
+
+  it('treats overlay selections as display-local coordinates', () => {
+    cropRects.length = 0
+    const externalCapture = {
+      display: { id: 2, bounds: { x: -1920, y: 0, width: 1920, height: 1080 }, scaleFactor: 1 },
+      dataUrl: 'data:full',
+    }
+    const result = cropCapture(externalCapture, {
+      displayId: 2,
+      rect: { x: 100, y: 50, width: 200, height: 100 },
+      source: 'region',
+    })
+    expect(result).not.toBeNull()
+    expect(cropRects.at(-1)).toEqual({ x: 100, y: 50, width: 200, height: 100 })
   })
 
   it('assigns an id and an ISO timestamp', () => {

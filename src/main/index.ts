@@ -21,9 +21,17 @@ if (!app.requestSingleInstanceLock()) {
   app.on('second-instance', () => getEditorWindow().focus())
 
   void app.whenReady().then(() => {
-    const captureRoot = defaultCaptureRoot()
+    // Tests point this at a temp directory so they never touch ~/Pictures.
+    const captureRoot = process.env.CHOP_CAPTURE_ROOT ?? defaultCaptureRoot()
     registerEditorHandlers(captureRoot)
     registerHotkeys(() => void capture())
+
+    // E2E seam: the main bundle is a single file, so Playwright cannot import
+    // sendCapture directly. Only exposed when a test capture root is set.
+    if (process.env.CHOP_CAPTURE_ROOT) {
+      ;(globalThis as { __chopSendCapture?: typeof sendCapture }).__chopSendCapture =
+        sendCapture
+    }
     tray = createTray({
       onCapture: () => void capture(),
       onOpenEditor: () => getEditorWindow().show(),

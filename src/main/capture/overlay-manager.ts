@@ -1,4 +1,4 @@
-import { BrowserWindow, ipcMain } from 'electron'
+import { BrowserWindow, globalShortcut, ipcMain } from 'electron'
 import { join } from 'node:path'
 import type { DisplayInfo } from '@shared/coords'
 import { CHANNELS, type OverlayInit, type OverlaySelection } from '@shared/ipc'
@@ -23,12 +23,14 @@ function createOverlayWindow(display: DisplayInfo): BrowserWindow {
     fullscreenable: false,
     skipTaskbar: true,
     show: false,
+    acceptFirstMouse: true,
     enableLargerThanScreen: true,
     webPreferences: { preload: join(import.meta.dirname, '../preload/overlay.mjs') },
   })
 
-  // 'screen-saver' floats above the menu bar, dock, and fullscreen apps.
-  overlay.setAlwaysOnTop(true, 'screen-saver')
+  // Keep the overlay above app windows, but below macOS privacy prompts. Using
+  // 'screen-saver' can trap the first-run Screen Recording prompt behind Chop.
+  overlay.setAlwaysOnTop(true, 'floating')
   overlay.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
   return overlay
 }
@@ -54,10 +56,12 @@ export async function showOverlays(
     capture,
     window: createOverlayWindow(capture.display),
   }))
+  let escapeRegistered = false
 
   const closeAll = (): void => {
     ipcMain.removeAllListeners(CHANNELS.overlaySelection)
     ipcMain.removeAllListeners(CHANNELS.overlayCancel)
+    if (escapeRegistered) globalShortcut.unregister('Escape')
     for (const { window } of overlays) {
       if (!window.isDestroyed()) window.destroy()
     }
@@ -69,6 +73,10 @@ export async function showOverlays(
         resolve(selection)
       })
       ipcMain.once(CHANNELS.overlayCancel, () => resolve(null))
+      escapeRegistered = globalShortcut.register('Escape', () => resolve(null))
+      if (!escapeRegistered) {
+        console.warn('Could not register temporary Escape shortcut for capture overlay.')
+      }
 
       // allSettled, not all: one display failing must not abort the capture.
       void Promise.allSettled(
