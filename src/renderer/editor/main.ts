@@ -146,7 +146,7 @@ async function openCapture(id: string): Promise<void> {
     empty.style.display = 'none'
     const doc = capture.documentJson
       ? parseDocument(capture.documentJson)
-      : createDocument(capture.id, capture.width, capture.height)
+      : createDocument(capture.id, capture.width, capture.height, capture.scaleFactor)
     state = createEditorState(doc)
     filmstrip.setActive(capture.id)
     draw()
@@ -161,7 +161,7 @@ bridge.onCapture((capture) => {
     view.setImage(image)
     loaded = true
     empty.style.display = 'none'
-    store.set(createEditorState(createDocument(capture.id, capture.width, capture.height)))
+    store.set(createEditorState(createDocument(capture.id, capture.width, capture.height, capture.scaleFactor)))
     save()
     filmstrip.setActive(capture.id)
     void filmstrip.refresh()

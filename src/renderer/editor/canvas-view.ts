@@ -1,4 +1,4 @@
-import { fitScale, viewToImage } from '@shared/canvas-mapping'
+import { backingScale, fitScale, viewToImage } from '@shared/canvas-mapping'
 import { outputSize } from '@shared/document'
 import type { EditorState } from '@shared/editor-state'
 import { currentDocument } from '@shared/editor-state'
@@ -29,6 +29,7 @@ const SELECTION_COLOR = '#2f9bff'
 
 export function createCanvasView(canvas: HTMLCanvasElement): CanvasView {
   let image: HTMLImageElement | null = null
+  /** CSS pixels per image pixel (on-screen size). Hit-testing uses this. */
   let currentScale = 1
 
   function ctx2d(): CanvasRenderingContext2D {
@@ -86,17 +87,22 @@ export function createCanvasView(canvas: HTMLCanvasElement): CanvasView {
         size.width, size.height,
         parent?.clientWidth ?? size.width,
         parent?.clientHeight ?? size.height,
+        doc.scaleFactor,
       )
+      const bufferScale = backingScale(currentScale, window.devicePixelRatio)
 
-      canvas.width = Math.max(1, Math.round(size.width * currentScale))
-      canvas.height = Math.max(1, Math.round(size.height * currentScale))
-      canvas.style.width = `${canvas.width}px`
-      canvas.style.height = `${canvas.height}px`
+      const cssWidth = Math.max(1, Math.round(size.width * currentScale))
+      const cssHeight = Math.max(1, Math.round(size.height * currentScale))
+      canvas.style.width = `${cssWidth}px`
+      canvas.style.height = `${cssHeight}px`
+      // Full-resolution backing store so DIP-sized CSS is not soft on Retina.
+      canvas.width = Math.max(1, Math.round(size.width * bufferScale))
+      canvas.height = Math.max(1, Math.round(size.height * bufferScale))
 
       const ctx = ctx2d()
       ctx.clearRect(0, 0, canvas.width, canvas.height)
       ctx.save()
-      ctx.scale(currentScale, currentScale)
+      ctx.scale(bufferScale, bufferScale)
       renderDocument(ctx, image, doc, browserCanvasFactory)
       drawSelection(ctx, state)
       drawCropDraft(ctx, state)

@@ -35,9 +35,14 @@ describe('createDocument', () => {
       id: 'doc-1',
       width: 800,
       height: 600,
+      scaleFactor: 1,
       cropRect: null,
       annotations: [],
     })
+  })
+
+  it('records the capture display scale factor', () => {
+    expect(createDocument('doc-1', 800, 600, 2).scaleFactor).toBe(2)
   })
 })
 
@@ -168,5 +173,17 @@ describe('serializeDocument / parseDocument', () => {
       annotations: [box, { id: 'x', kind: 'wormhole' }],
     })
     expect(parseDocument(payload).annotations.map((a) => a.id)).toEqual(['a1'])
+  })
+
+  it('defaults a missing scaleFactor to 1 for older documents', () => {
+    const payload = JSON.stringify({
+      id: 'd', width: 10, height: 10, cropRect: null, annotations: [],
+    })
+    expect(parseDocument(payload).scaleFactor).toBe(1)
+  })
+
+  it('preserves a stored scaleFactor on round-trip', () => {
+    const doc = createDocument('d', 800, 600, 2)
+    expect(parseDocument(serializeDocument(doc)).scaleFactor).toBe(2)
   })
 })

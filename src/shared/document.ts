@@ -51,14 +51,24 @@ export type CaptureDocument = {
   /** Full source image size in pixels, independent of any crop. */
   readonly width: number
   readonly height: number
+  /**
+   * Display scale at capture time. Editor preview uses this so physical-pixel
+   * captures render at on-screen (DIP) size rather than looking zoomed in.
+   */
+  readonly scaleFactor: number
   /** Non-destructive crop in image coordinates, or null for the full image. */
   readonly cropRect: Rect | null
   /** Ordered back to front. */
   readonly annotations: readonly Annotation[]
 }
 
-export function createDocument(id: string, width: number, height: number): CaptureDocument {
-  return { id, width, height, cropRect: null, annotations: [] }
+export function createDocument(
+  id: string,
+  width: number,
+  height: number,
+  scaleFactor = 1,
+): CaptureDocument {
+  return { id, width, height, scaleFactor, cropRect: null, annotations: [] }
 }
 
 export function addAnnotation(doc: CaptureDocument, annotation: Annotation): CaptureDocument {
@@ -134,7 +144,10 @@ export function parseDocument(json: string): CaptureDocument {
     throw new Error('capture document must be an object')
   }
 
-  const { id, width, height, cropRect, annotations } = parsed as Record<string, unknown>
+  const { id, width, height, scaleFactor, cropRect, annotations } = parsed as Record<
+    string,
+    unknown
+  >
   if (typeof id !== 'string' || typeof width !== 'number' || typeof height !== 'number') {
     throw new Error('capture document is missing id, width, or height')
   }
@@ -143,6 +156,10 @@ export function parseDocument(json: string): CaptureDocument {
     id,
     width,
     height,
+    scaleFactor:
+      typeof scaleFactor === 'number' && Number.isFinite(scaleFactor) && scaleFactor > 0
+        ? scaleFactor
+        : 1,
     cropRect: isRect(cropRect) ? cropRect : null,
     annotations: Array.isArray(annotations) ? annotations.filter(isAnnotation) : [],
   }

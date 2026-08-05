@@ -38,6 +38,7 @@ export function cropCapture(
     dataUrl: output.toDataURL(),
     width: outputSize.width,
     height: outputSize.height,
+    scaleFactor: capture.display.scaleFactor,
     createdAt: new Date().toISOString(),
   }
 }

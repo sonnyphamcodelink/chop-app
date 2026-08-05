@@ -38,6 +38,7 @@ describe('cropCapture', () => {
     expect(result?.width).toBe(cropped.width)
     expect(result?.height).toBe(cropped.height)
     expect(result?.dataUrl).toBe('data:cropped')
+    expect(result?.scaleFactor).toBe(2)
     expect(cropRects.at(-1)).toEqual({ x: 200, y: 100, width: 400, height: 200 })
   })
 

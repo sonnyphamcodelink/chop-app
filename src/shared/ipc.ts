@@ -50,6 +50,8 @@ export type CaptureResult = {
   readonly dataUrl: string
   readonly width: number
   readonly height: number
+  /** Display scale at capture time (1 on non-Retina, 2 on Retina). */
+  readonly scaleFactor: number
   readonly createdAt: string
 }
 
