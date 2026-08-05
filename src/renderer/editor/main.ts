@@ -1,3 +1,5 @@
+import { AUTOSAVE_DEBOUNCE_MS } from '@shared/constants'
+import { debounce } from '@shared/debounce'
 import { addAnnotation, createDocument } from '@shared/document'
 import {
   commitDocument,
@@ -22,6 +24,7 @@ type EditorBridge = {
   onCapture(handler: (capture: CaptureResult) => void): void
   save(payload: { id: string; flattenedDataUrl: string; document: unknown }): void
   copy(dataUrl: string): void
+  saveAs(dataUrl: string): Promise<string | null>
 }
 
 const bridge = (window as unknown as { chopEditor: EditorBridge }).chopEditor
@@ -40,8 +43,11 @@ let imageElement: HTMLImageElement | null = null
 const store = {
   get: (): EditorState => state,
   set: (next: EditorState): void => {
+    const documentChanged = next.history.present !== state.history.present
     state = next
     draw()
+    // `autosave` is initialised below; no store.set runs during module init.
+    if (documentChanged && loaded) autosave()
   },
 }
 
@@ -112,6 +118,9 @@ function save(): void {
   })
 }
 
+const autosave = debounce(save, AUTOSAVE_DEBOUNCE_MS)
+window.addEventListener('beforeunload', () => autosave.flush())
+
 bridge.onCapture((capture) => {
   const image = new Image()
   image.addEventListener('load', () => {
@@ -140,6 +149,12 @@ document.addEventListener('keydown', (event) => {
   if (meta && event.key.toLowerCase() === 'c') {
     event.preventDefault()
     copyToClipboard()
+    return
+  }
+  if (meta && event.key.toLowerCase() === 's') {
+    event.preventDefault()
+    const dataUrl = flattenToDataUrl()
+    if (dataUrl) void bridge.saveAs(dataUrl)
     return
   }
   if (event.key === 'Delete' || event.key === 'Backspace') {

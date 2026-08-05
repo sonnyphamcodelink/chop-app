@@ -13,6 +13,9 @@ contextBridge.exposeInMainWorld('chopEditor', {
   copy(dataUrl: string): void {
     ipcRenderer.send(CHANNELS.copyCapture, dataUrl)
   },
+  saveAs(dataUrl: string): Promise<string | null> {
+    return ipcRenderer.invoke(CHANNELS.saveCaptureAs, dataUrl) as Promise<string | null>
+  },
   listCaptures(): Promise<unknown> {
     return ipcRenderer.invoke(CHANNELS.listCaptures)
   },

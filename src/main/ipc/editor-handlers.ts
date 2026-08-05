@@ -1,0 +1,100 @@
+import { clipboard, dialog, ipcMain, nativeImage } from 'electron'
+import { writeFile } from 'node:fs/promises'
+import { thumbnailSize } from '@shared/flatten'
+import { CHANNELS, type SaveRequest } from '@shared/ipc'
+import { captureBaseName, findRecord } from '@shared/manifest'
+import {
+  loadCapture,
+  readManifest,
+  rebuildManifest,
+  saveCapture,
+} from '../storage/capture-store'
+
+/** Base names are assigned once per capture id so re-saves overwrite in place. */
+const namesById = new Map<string, string>()
+
+function nameFor(id: string): string {
+  const existing = namesById.get(id)
+  if (existing) return existing
+  const name = captureBaseName(new Date())
+  namesById.set(id, name)
+  return name
+}
+
+export function registerEditorHandlers(rootDir: string): void {
+  ipcMain.on(CHANNELS.saveCapture, (_event, request: SaveRequest) => {
+    void (async (): Promise<void> => {
+      try {
+        const image = nativeImage.createFromDataURL(request.flattenedDataUrl)
+        if (image.isEmpty()) throw new Error('flattened image was empty')
+
+        const size = image.getSize()
+        const thumb = thumbnailSize(size.width, size.height)
+        const name = nameFor(request.id)
+
+        await saveCapture(rootDir, {
+          id: request.id,
+          name,
+          createdAt: new Date().toISOString(),
+          width: size.width,
+          height: size.height,
+          flatPng: image.toPNG(),
+          originalPng: image.toPNG(),
+          thumbPng: image.resize(thumb).toPNG(),
+          documentJson: JSON.stringify(request.document),
+        })
+      } catch (error) {
+        console.error('Failed to save capture.', error)
+        await dialog.showMessageBox({
+          type: 'error',
+          title: 'Could not save capture',
+          message:
+            'Chop could not write the capture to disk. Use Save As to choose another location.',
+          detail: error instanceof Error ? error.message : String(error),
+        })
+      }
+    })()
+  })
+
+  ipcMain.on(CHANNELS.copyCapture, (_event, dataUrl: string) => {
+    const image = nativeImage.createFromDataURL(dataUrl)
+    if (image.isEmpty()) {
+      console.warn('Refusing to copy an empty image to the clipboard.')
+      return
+    }
+    clipboard.writeImage(image)
+  })
+
+  ipcMain.handle(CHANNELS.saveCaptureAs, async (_event, dataUrl: string) => {
+    const { canceled, filePath } = await dialog.showSaveDialog({
+      defaultPath: `${captureBaseName(new Date())}.png`,
+      filters: [{ name: 'PNG image', extensions: ['png'] }],
+    })
+    if (canceled || !filePath) return null
+    await writeFile(filePath, nativeImage.createFromDataURL(dataUrl).toPNG())
+    return filePath
+  })
+
+  ipcMain.handle(CHANNELS.listCaptures, async () => {
+    const manifest = await readManifest(rootDir)
+    const usable = manifest.records.length > 0 ? manifest : await rebuildManifest(rootDir)
+    return usable.records
+  })
+
+  ipcMain.handle(CHANNELS.openCapture, async (_event, id: string) => {
+    const manifest = await readManifest(rootDir)
+    const record = findRecord(manifest, id)
+    if (!record) return null
+
+    const { originalPng, documentJson } = await loadCapture(rootDir, record)
+    namesById.set(record.id, record.name)
+    return {
+      id: record.id,
+      dataUrl: `data:image/png;base64,${originalPng.toString('base64')}`,
+      width: record.width,
+      height: record.height,
+      createdAt: record.createdAt,
+      documentJson,
+    }
+  })
+}
