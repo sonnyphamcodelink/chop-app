@@ -2,7 +2,8 @@ node_modules/
 dist/
 out/
 release/
-resources/
+# Compiled by scripts/build-swift-helper.mjs; icons here are source and tracked.
+resources/windowlist
 *.log
 .DS_Store
 .superpowers/
