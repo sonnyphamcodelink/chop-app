@@ -2,7 +2,7 @@ import { DEFAULT_FONT_SIZE, DEFAULT_STROKE_WIDTH } from './constants'
 import type { Annotation, CaptureDocument } from './document'
 import { isDegenerateRect, normalizeRect, type Point, type Rect } from './geometry'
 
-export type ToolId = 'select' | 'box' | 'arrow' | 'text' | 'highlight' | 'blur' | 'crop'
+export type ToolId = 'box' | 'arrow' | 'text' | 'highlight' | 'blur' | 'crop'
 
 export type ToolStyle = {
   readonly color: string
@@ -41,7 +41,7 @@ export function isDrawingTool(tool: ToolId): boolean {
 
 /**
  * Converts a completed drag into an annotation, or null when the drag is too
- * small or the tool handles its own interaction (text, crop, select).
+ * small or the tool handles its own interaction (text, crop).
  */
 export function draftToAnnotation(
   draft: Draft,

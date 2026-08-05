@@ -82,7 +82,6 @@ describe('draftToAnnotation', () => {
 
   it('returns null for tools that do not produce annotations', () => {
     expect(draftToAnnotation(drag('crop'), style, 'a6')).toBeNull()
-    expect(draftToAnnotation(drag('select'), style, 'a7')).toBeNull()
     expect(draftToAnnotation(drag('text'), style, 'a8')).toBeNull()
   })
 })
@@ -93,8 +92,8 @@ describe('isDrawingTool', () => {
     expect(drawing.every(isDrawingTool)).toBe(true)
   })
 
-  it('excludes select, text, and crop', () => {
-    const other: readonly ToolId[] = ['select', 'text', 'crop']
+  it('excludes text and crop', () => {
+    const other: readonly ToolId[] = ['text', 'crop']
     expect(other.some(isDrawingTool)).toBe(false)
   })
 })

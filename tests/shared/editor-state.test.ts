@@ -4,14 +4,12 @@ import {
   commitDocument,
   createEditorState,
   currentDocument,
-  deleteSelected,
   previewDocument,
-  redoState,
-  selectAnnotation,
   setDraft,
   setStyle,
   setTool,
   undoState,
+  redoState,
 } from '@shared/editor-state'
 import { beginDraft } from '@shared/tools'
 
@@ -24,28 +22,20 @@ const box: Annotation = {
 const base = createDocument('d', 800, 600)
 
 describe('createEditorState', () => {
-  it('starts on the select tool with nothing selected', () => {
+  it('starts on the box tool with no draft', () => {
     const state = createEditorState(base)
-    expect(state.tool).toBe('select')
-    expect(state.selectedId).toBeNull()
+    expect(state.tool).toBe('box')
     expect(state.draft).toBeNull()
     expect(currentDocument(state)).toEqual(base)
   })
 })
 
 describe('setTool', () => {
-  it('switches the active tool', () => {
-    expect(setTool(createEditorState(base), 'arrow').tool).toBe('arrow')
-  })
-
-  it('clears the selection when leaving the select tool', () => {
-    const selected = selectAnnotation(createEditorState(base), 'b1')
-    expect(setTool(selected, 'box').selectedId).toBeNull()
-  })
-
-  it('keeps the selection when staying on select', () => {
-    const selected = selectAnnotation(createEditorState(base), 'b1')
-    expect(setTool(selected, 'select').selectedId).toBe('b1')
+  it('switches the active tool and clears the draft', () => {
+    const drafted = setDraft(createEditorState(base), beginDraft('box', { x: 1, y: 1 }))
+    const next = setTool(drafted, 'arrow')
+    expect(next.tool).toBe('arrow')
+    expect(next.draft).toBeNull()
   })
 })
 
@@ -84,34 +74,17 @@ describe('commitDocument vs previewDocument', () => {
   })
 })
 
-describe('deleteSelected', () => {
-  it('removes the selected annotation and clears the selection', () => {
-    const withBox = commitDocument(createEditorState(base), addAnnotation(base, box))
-    const state = deleteSelected(selectAnnotation(withBox, 'b1'))
-    expect(currentDocument(state).annotations).toHaveLength(0)
-    expect(state.selectedId).toBeNull()
-  })
-
-  it('is undoable', () => {
-    const withBox = commitDocument(createEditorState(base), addAnnotation(base, box))
-    const deleted = deleteSelected(selectAnnotation(withBox, 'b1'))
-    expect(currentDocument(undoState(deleted)).annotations).toHaveLength(1)
-  })
-
-  it('is a no-op when nothing is selected', () => {
-    const withBox = commitDocument(createEditorState(base), addAnnotation(base, box))
-    expect(deleteSelected(withBox)).toEqual(withBox)
-  })
-})
-
 describe('undoState / redoState', () => {
   it('round-trips a commit', () => {
     const state = commitDocument(createEditorState(base), addAnnotation(base, box))
     expect(currentDocument(redoState(undoState(state)))).toEqual(currentDocument(state))
   })
 
-  it('clears the selection on undo so no stale id remains', () => {
-    const withBox = commitDocument(createEditorState(base), addAnnotation(base, box))
-    expect(undoState(selectAnnotation(withBox, 'b1')).selectedId).toBeNull()
+  it('clears the draft on undo', () => {
+    const drafted = setDraft(
+      commitDocument(createEditorState(base), addAnnotation(base, box)),
+      beginDraft('box', { x: 1, y: 1 }),
+    )
+    expect(undoState(drafted).draft).toBeNull()
   })
 })
