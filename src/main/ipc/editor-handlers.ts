@@ -1,5 +1,5 @@
 import { clipboard, dialog, ipcMain, nativeImage } from 'electron'
-import { writeFile } from 'node:fs/promises'
+import { readFile, writeFile } from 'node:fs/promises'
 import { thumbnailSize } from '@shared/flatten'
 import { CHANNELS, type SaveRequest } from '@shared/ipc'
 import { captureBaseName, findRecord } from '@shared/manifest'
@@ -9,6 +9,7 @@ import {
   rebuildManifest,
   saveCapture,
 } from '../storage/capture-store'
+import { capturePaths } from '../storage/paths'
 
 /** Base names are assigned once per capture id so re-saves overwrite in place. */
 const namesById = new Map<string, string>()
@@ -78,7 +79,18 @@ export function registerEditorHandlers(rootDir: string): void {
   ipcMain.handle(CHANNELS.listCaptures, async () => {
     const manifest = await readManifest(rootDir)
     const usable = manifest.records.length > 0 ? manifest : await rebuildManifest(rootDir)
-    return usable.records
+
+    return Promise.all(
+      usable.records.map(async (record) => {
+        try {
+          const bytes = await readFile(capturePaths(rootDir, record.name).thumb)
+          return { ...record, thumbDataUrl: `data:image/png;base64,${bytes.toString('base64')}` }
+        } catch {
+          // A missing thumbnail should not hide the capture from the filmstrip.
+          return { ...record, thumbDataUrl: null }
+        }
+      }),
+    )
   })
 
   ipcMain.handle(CHANNELS.openCapture, async (_event, id: string) => {

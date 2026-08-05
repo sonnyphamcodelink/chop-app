@@ -1,6 +1,6 @@
 import { AUTOSAVE_DEBOUNCE_MS } from '@shared/constants'
 import { debounce } from '@shared/debounce'
-import { addAnnotation, createDocument } from '@shared/document'
+import { addAnnotation, createDocument, parseDocument } from '@shared/document'
 import {
   commitDocument,
   createEditorState,
@@ -16,6 +16,7 @@ import {
 import type { CaptureResult } from '@shared/ipc'
 import type { ToolId } from '@shared/tools'
 import { browserCanvasFactory, createCanvasView } from './canvas-view'
+import { createFilmstrip, type FilmstripEntry } from './filmstrip'
 import { attachInteractions } from './interactions'
 import { createTextInput } from './text-input'
 import { createToolbar } from './toolbar'
@@ -25,6 +26,8 @@ type EditorBridge = {
   save(payload: { id: string; flattenedDataUrl: string; document: unknown }): void
   copy(dataUrl: string): void
   saveAs(dataUrl: string): Promise<string | null>
+  listCaptures(): Promise<unknown>
+  openCapture(id: string): Promise<unknown>
 }
 
 const bridge = (window as unknown as { chopEditor: EditorBridge }).chopEditor
@@ -34,6 +37,7 @@ const stage = document.querySelector<HTMLDivElement>('#stage')!
 const toolbarRoot = document.querySelector<HTMLDivElement>('#toolbar')!
 const textElement = document.querySelector<HTMLInputElement>('#text-input')!
 const empty = document.querySelector<HTMLDivElement>('#empty')!
+const filmstripRoot = document.querySelector<HTMLDivElement>('#filmstrip')!
 
 const view = createCanvasView(canvas)
 let state: EditorState = createEditorState(createDocument('empty', 0, 0))
@@ -121,6 +125,35 @@ function save(): void {
 const autosave = debounce(save, AUTOSAVE_DEBOUNCE_MS)
 window.addEventListener('beforeunload', () => autosave.flush())
 
+const filmstrip = createFilmstrip(
+  filmstripRoot,
+  () => bridge.listCaptures() as Promise<readonly FilmstripEntry[]>,
+  (id) => void openCapture(id),
+)
+
+/** Loads a past capture, restoring its annotations so they stay editable. */
+async function openCapture(id: string): Promise<void> {
+  const capture = (await bridge.openCapture(id)) as
+    | (CaptureResult & { documentJson: string | null })
+    | null
+  if (!capture) return
+
+  const image = new Image()
+  image.addEventListener('load', () => {
+    imageElement = image
+    view.setImage(image)
+    loaded = true
+    empty.style.display = 'none'
+    const doc = capture.documentJson
+      ? parseDocument(capture.documentJson)
+      : createDocument(capture.id, capture.width, capture.height)
+    state = createEditorState(doc)
+    filmstrip.setActive(capture.id)
+    draw()
+  })
+  image.src = capture.dataUrl
+}
+
 bridge.onCapture((capture) => {
   const image = new Image()
   image.addEventListener('load', () => {
@@ -130,9 +163,13 @@ bridge.onCapture((capture) => {
     empty.style.display = 'none'
     store.set(createEditorState(createDocument(capture.id, capture.width, capture.height)))
     save()
+    filmstrip.setActive(capture.id)
+    void filmstrip.refresh()
   })
   image.src = capture.dataUrl
 })
+
+void filmstrip.refresh()
 
 const SHORTCUT_TOOLS: Readonly<Record<string, ToolId>> = {
   v: 'select', b: 'box', a: 'arrow', t: 'text', h: 'highlight', x: 'blur', c: 'crop',
