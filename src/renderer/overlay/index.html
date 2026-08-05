@@ -1,1 +1,66 @@
-<!doctype html><title>overlay</title>
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Chop capture</title>
+    <style>
+      html, body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        cursor: crosshair;
+        user-select: none;
+        background: transparent;
+      }
+      #frozen {
+        position: fixed;
+        inset: 0;
+        width: 100vw;
+        height: 100vh;
+      }
+      #veil {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.35);
+      }
+      /* The selected area is punched out of the veil by a huge box-shadow. */
+      #cutout {
+        position: fixed;
+        display: none;
+        box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.35);
+        outline: 2px solid #2f9bff;
+        pointer-events: none;
+      }
+      #label {
+        position: fixed;
+        display: none;
+        padding: 3px 7px;
+        font: 12px -apple-system, system-ui, sans-serif;
+        color: #fff;
+        background: rgba(0, 0, 0, 0.78);
+        border-radius: 4px;
+        pointer-events: none;
+      }
+      #hint {
+        position: fixed;
+        left: 50%;
+        bottom: 40px;
+        transform: translateX(-50%);
+        padding: 8px 14px;
+        font: 13px -apple-system, system-ui, sans-serif;
+        color: #fff;
+        background: rgba(0, 0, 0, 0.7);
+        border-radius: 8px;
+        pointer-events: none;
+      }
+    </style>
+  </head>
+  <body>
+    <img id="frozen" alt="" />
+    <div id="veil"></div>
+    <div id="cutout"></div>
+    <div id="label"></div>
+    <div id="hint">Click a window · Drag a region · Esc to cancel</div>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>
