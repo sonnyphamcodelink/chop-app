@@ -1,4 +1,5 @@
-import { type CaptureDocument } from './document'
+import { setCrop, type CaptureDocument } from './document'
+import { initialCropRect } from './crop-session'
 import {
   createHistory,
   type History,
@@ -33,13 +34,31 @@ export function currentDocument(state: EditorState): CaptureDocument {
 }
 
 export function setTool(state: EditorState, tool: ToolId): EditorState {
+  if (tool === 'crop') {
+    return {
+      ...state,
+      tool,
+      draft: null,
+      cropSession: { rect: initialCropRect(currentDocument(state)) },
+    }
+  }
+  return { ...state, tool, draft: null, cropSession: null }
+}
+
+export function setCropSession(state: EditorState, rect: Rect | null): EditorState {
   return {
     ...state,
-    tool,
-    draft: null,
-    // Crop session is started in Task 4 via setTool + begin helpers.
-    // For now clear it when leaving crop; Task 4 will initialize on enter.
-    cropSession: tool === 'crop' ? state.cropSession : null,
+    cropSession: rect ? { rect } : null,
+  }
+}
+
+export function commitCrop(state: EditorState): EditorState {
+  if (!state.cropSession) return state
+  const rect = state.cropSession.rect
+  return {
+    ...commitDocument(state, setCrop(currentDocument(state), rect)),
+    cropSession: { rect },
+    tool: 'crop',
   }
 }
 
@@ -60,9 +79,15 @@ export function previewDocument(state: EditorState, doc: CaptureDocument): Edito
 }
 
 export function undoState(state: EditorState): EditorState {
-  return { ...state, history: undo(state.history), draft: null }
+  const history = undo(state.history)
+  const next = { ...state, history, draft: null }
+  if (next.tool !== 'crop') return { ...next, cropSession: null }
+  return { ...next, cropSession: { rect: initialCropRect(history.present) } }
 }
 
 export function redoState(state: EditorState): EditorState {
-  return { ...state, history: redo(state.history), draft: null }
+  const history = redo(state.history)
+  const next = { ...state, history, draft: null }
+  if (next.tool !== 'crop') return { ...next, cropSession: null }
+  return { ...next, cropSession: { rect: initialCropRect(history.present) } }
 }
