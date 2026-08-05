@@ -5,10 +5,8 @@ import {
   commitDocument,
   createEditorState,
   currentDocument,
-  deleteSelected,
   type EditorState,
   redoState,
-  selectAnnotation,
   setStyle,
   setTool,
   undoState,
@@ -172,7 +170,7 @@ bridge.onCapture((capture) => {
 void filmstrip.refresh()
 
 const SHORTCUT_TOOLS: Readonly<Record<string, ToolId>> = {
-  v: 'select', b: 'box', a: 'arrow', t: 'text', h: 'highlight', x: 'blur', c: 'crop',
+  b: 'box', a: 'arrow', t: 'text', h: 'highlight', x: 'blur', c: 'crop',
 }
 
 document.addEventListener('keydown', (event) => {
@@ -192,17 +190,6 @@ document.addEventListener('keydown', (event) => {
     event.preventDefault()
     const dataUrl = flattenToDataUrl()
     if (dataUrl) void bridge.saveAs(dataUrl)
-    return
-  }
-  if (event.key === 'Delete' || event.key === 'Backspace') {
-    if (state.selectedId) {
-      event.preventDefault()
-      store.set(deleteSelected(state))
-    }
-    return
-  }
-  if (event.key === 'Escape') {
-    store.set(selectAnnotation(state, null))
     return
   }
   if (!meta) {

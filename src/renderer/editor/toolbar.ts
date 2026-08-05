@@ -1,7 +1,6 @@
 import type { ToolId } from '@shared/tools'
 
 const TOOLS: readonly { readonly id: ToolId; readonly label: string; readonly key: string }[] = [
-  { id: 'select', label: 'Select', key: 'V' },
   { id: 'box', label: 'Box', key: 'B' },
   { id: 'arrow', label: 'Arrow', key: 'A' },
   { id: 'text', label: 'Text', key: 'T' },

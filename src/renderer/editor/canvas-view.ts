@@ -3,7 +3,6 @@ import { outputSize } from '@shared/document'
 import type { EditorState } from '@shared/editor-state'
 import { currentDocument } from '@shared/editor-state'
 import type { Point } from '@shared/geometry'
-import { annotationBounds, handleRects } from '@shared/hit-test'
 import { type CanvasFactory, renderDocument } from '@shared/render'
 import { cropDraftRect, documentWithDraft } from '@shared/tools'
 
@@ -36,30 +35,6 @@ export function createCanvasView(canvas: HTMLCanvasElement): CanvasView {
     const ctx = canvas.getContext('2d')
     if (!ctx) throw new Error('2D canvas context unavailable')
     return ctx
-  }
-
-  function drawSelection(ctx: CanvasRenderingContext2D, state: EditorState): void {
-    if (state.tool !== 'select' || !state.selectedId) return
-    const annotation = currentDocument(state).annotations.find(
-      (a) => a.id === state.selectedId,
-    )
-    if (!annotation) return
-
-    const bounds = annotationBounds(annotation)
-    ctx.save()
-    ctx.strokeStyle = SELECTION_COLOR
-    ctx.lineWidth = 1 / currentScale
-    ctx.setLineDash([4 / currentScale, 3 / currentScale])
-    ctx.strokeRect(bounds.x, bounds.y, bounds.width, bounds.height)
-    ctx.setLineDash([])
-    ctx.fillStyle = SELECTION_COLOR
-    for (const handle of handleRects(bounds)) {
-      ctx.fillRect(
-        handle.rect.x, handle.rect.y,
-        handle.rect.width / currentScale, handle.rect.height / currentScale,
-      )
-    }
-    ctx.restore()
   }
 
   function drawCropDraft(ctx: CanvasRenderingContext2D, state: EditorState): void {
@@ -104,7 +79,6 @@ export function createCanvasView(canvas: HTMLCanvasElement): CanvasView {
       ctx.save()
       ctx.scale(bufferScale, bufferScale)
       renderDocument(ctx, image, doc, browserCanvasFactory)
-      drawSelection(ctx, state)
       drawCropDraft(ctx, state)
       ctx.restore()
     },
