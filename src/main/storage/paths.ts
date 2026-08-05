@@ -1,11 +1,6 @@
-import { app } from 'electron'
 import { join } from 'node:path'
 
 const SIDECAR = '.chop'
-
-export function defaultCaptureRoot(): string {
-  return join(app.getPath('pictures'), 'Chop')
-}
 
 export function sidecarDirs(rootDir: string): {
   readonly base: string
