@@ -1,14 +1,13 @@
 import { addAnnotation } from '@shared/document'
-import { constrainCropRect, fullImageRect, initialCropRect, moveCropRect } from '@shared/crop-session'
+import { constrainCropRect, fullImageRect, moveCropRect } from '@shared/crop-session'
 import {
-  commitCrop,
   commitDocument,
   currentDocument,
   type EditorState,
   setCropSession,
   setDraft,
 } from '@shared/editor-state'
-import { type Point, rectContains, rectsEqual, type Rect } from '@shared/geometry'
+import { type Point, rectContains } from '@shared/geometry'
 import { type HandleId, handleAtPoint, resizeRect } from '@shared/hit-test'
 import { beginDraft, draftToAnnotation, isDrawingTool, updateDraft } from '@shared/tools'
 import type { CanvasView } from './canvas-view'
@@ -20,16 +19,8 @@ export type Store = {
 
 type Gesture =
   | { readonly mode: 'draw' }
-  | {
-      readonly mode: 'crop-resize'
-      readonly handle: HandleId
-      readonly startRect: Rect
-    }
-  | {
-      readonly mode: 'crop-move'
-      readonly last: Point
-      readonly startRect: Rect
-    }
+  | { readonly mode: 'crop-resize'; readonly handle: HandleId }
+  | { readonly mode: 'crop-move'; readonly last: Point }
 
 function newId(): string {
   return crypto.randomUUID()
@@ -54,11 +45,11 @@ export function attachInteractions(
     }
     if (state.tool === 'crop' && state.cropSession) {
       const { rect } = state.cropSession
-      const handle = handleAtPoint(rect, point)
+      const handle = handleAtPoint(rect, point, view.scale())
       if (handle) {
-        gesture = { mode: 'crop-resize', handle, startRect: rect }
+        gesture = { mode: 'crop-resize', handle }
       } else if (rectContains(rect, point)) {
-        gesture = { mode: 'crop-move', last: point, startRect: rect }
+        gesture = { mode: 'crop-move', last: point }
       }
       return
     }
@@ -101,7 +92,10 @@ export function attachInteractions(
     const finished = gesture
     gesture = null
 
-    if (finished.mode === 'draw' && state.draft) {
+    // A crop gesture only adjusts the working frame; Enter commits it.
+    if (finished.mode !== 'draw') return
+
+    if (state.draft) {
       const annotation = draftToAnnotation(state.draft, state.style, newId())
       store.set(
         annotation
@@ -111,24 +105,15 @@ export function attachInteractions(
       return
     }
 
-    if (finished.mode === 'crop-resize' || finished.mode === 'crop-move') {
-      const moved = !state.cropSession || !rectsEqual(state.cropSession.rect, finished.startRect)
-      if (moved) store.set(commitCrop(state))
-      return
-    }
-
     store.set(setDraft(state, null))
   })
 
   canvas.addEventListener('mouseleave', () => {
     if (!gesture) return
-    const isCrop = gesture.mode === 'crop-resize' || gesture.mode === 'crop-move'
+    const abandoned = gesture
     gesture = null
-    const state = store.get()
-    if (isCrop) {
-      store.set(setCropSession(state, initialCropRect(currentDocument(state))))
-      return
-    }
-    store.set(setDraft(state, null))
+    // Leaving the canvas ends the drag but keeps the frame the user dragged out.
+    if (abandoned.mode !== 'draw') return
+    store.set(setDraft(store.get(), null))
   })
 }

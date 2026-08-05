@@ -2,6 +2,7 @@ import { AUTOSAVE_DEBOUNCE_MS } from '@shared/constants'
 import { debounce } from '@shared/debounce'
 import { addAnnotation, createDocument, parseDocument } from '@shared/document'
 import {
+  commitCrop,
   commitDocument,
   createEditorState,
   currentDocument,
@@ -58,8 +59,16 @@ function draw(): void {
   if (loaded) view.render(state)
 }
 
+/** Where Escape and Enter return to when a crop session ends. */
+let lastNonCropTool: ToolId = 'box'
+
+function applyTool(tool: ToolId, from: EditorState = state): void {
+  if (tool !== 'crop') lastNonCropTool = tool
+  store.set(setTool(from, tool))
+}
+
 const toolbar = createToolbar(toolbarRoot, {
-  onTool: (tool) => store.set(setTool(state, tool)),
+  onTool: applyTool,
   onColor: (color) => store.set(setStyle(state, { color })),
   onStrokeWidth: (strokeWidth) => store.set(setStyle(state, { strokeWidth })),
   onUndo: () => store.set(undoState(state)),
@@ -106,6 +115,7 @@ function flattenToDataUrl(): string {
 }
 
 function copyToClipboard(): void {
+  commitPendingCrop()
   const dataUrl = flattenToDataUrl()
   if (dataUrl) bridge.copy(dataUrl)
 }
@@ -122,6 +132,32 @@ function save(): void {
 
 const autosave = debounce(save, AUTOSAVE_DEBOUNCE_MS)
 window.addEventListener('beforeunload', () => autosave.flush())
+
+/** Writes now, dropping any debounced save so the same state is not written twice. */
+function saveNow(): void {
+  autosave.cancel()
+  save()
+}
+
+/** Folds any working crop frame into the document so exports include it. */
+function commitPendingCrop(): void {
+  if (isCropping()) applyTool(lastNonCropTool, commitCrop(state))
+}
+
+/** Applies the working crop frame, leaves crop, and writes the result to disk. */
+function finishCrop(): void {
+  commitPendingCrop()
+  saveNow()
+}
+
+/** Abandons the working crop frame; the document keeps whatever crop it had. */
+function cancelCrop(): void {
+  applyTool(lastNonCropTool)
+}
+
+function isCropping(): boolean {
+  return state.tool === 'crop' && !!state.cropSession
+}
 
 const filmstrip = createFilmstrip(
   filmstripRoot,
@@ -176,6 +212,13 @@ const SHORTCUT_TOOLS: Readonly<Record<string, ToolId>> = {
 document.addEventListener('keydown', (event) => {
   const meta = event.metaKey || event.ctrlKey
 
+  if (isCropping() && (event.key === 'Enter' || event.key === 'Escape')) {
+    event.preventDefault()
+    if (event.key === 'Enter') finishCrop()
+    else cancelCrop()
+    return
+  }
+
   if (meta && event.key.toLowerCase() === 'z') {
     event.preventDefault()
     store.set(event.shiftKey ? redoState(state) : undoState(state))
@@ -188,13 +231,14 @@ document.addEventListener('keydown', (event) => {
   }
   if (meta && event.key.toLowerCase() === 's') {
     event.preventDefault()
+    commitPendingCrop()
     const dataUrl = flattenToDataUrl()
     if (dataUrl) void bridge.saveAs(dataUrl)
     return
   }
   if (!meta) {
     const tool = SHORTCUT_TOOLS[event.key.toLowerCase()]
-    if (tool) store.set(setTool(state, tool))
+    if (tool) applyTool(tool)
   }
 })
 

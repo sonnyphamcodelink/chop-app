@@ -28,6 +28,10 @@ export type CanvasView = {
 
 const SELECTION_COLOR = '#2f9bff'
 
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max)
+}
+
 export function createCanvasView(canvas: HTMLCanvasElement): CanvasView {
   let image: HTMLImageElement | null = null
   /** CSS pixels per image pixel (on-screen size). Hit-testing uses this. */
@@ -70,10 +74,20 @@ export function createCanvasView(canvas: HTMLCanvasElement): CanvasView {
     ctx.setLineDash([])
     ctx.fillStyle = SELECTION_COLOR
     for (const handle of handleRects(rect)) {
+      // Handles keep a constant on-screen size, and are nudged off the image
+      // edge so a frame at the boundary still shows a whole, grabbable square.
       const w = handle.rect.width / scale
       const h = handle.rect.height / scale
-      const cx = handle.rect.x + handle.rect.width / 2
-      const cy = handle.rect.y + handle.rect.height / 2
+      const cx = clamp(
+        handle.rect.x + handle.rect.width / 2,
+        bounds.x + w / 2,
+        bounds.x + bounds.width - w / 2,
+      )
+      const cy = clamp(
+        handle.rect.y + handle.rect.height / 2,
+        bounds.y + h / 2,
+        bounds.y + bounds.height - h / 2,
+      )
       ctx.fillRect(cx - w / 2, cy - h / 2, w, h)
     }
     ctx.restore()

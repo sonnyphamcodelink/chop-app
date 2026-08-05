@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
+import { HANDLE_SIZE } from '@shared/constants'
 import { addAnnotation, type Annotation, createDocument } from '@shared/document'
+import { rectContains } from '@shared/geometry'
 import {
   annotationAtPoint,
   annotationBounds,
@@ -73,6 +75,17 @@ describe('handleRects', () => {
       'nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w',
     ])
   })
+
+  it('centres each drawn handle on its anchor at HANDLE_SIZE across', () => {
+    const handles = handleRects({ x: 100, y: 100, width: 200, height: 100 })
+    const se = handles.find((h) => h.id === 'se')!
+    expect(se.rect).toEqual({
+      x: 300 - HANDLE_SIZE / 2,
+      y: 200 - HANDLE_SIZE / 2,
+      width: HANDLE_SIZE,
+      height: HANDLE_SIZE,
+    })
+  })
 })
 
 describe('handleAtPoint', () => {
@@ -84,6 +97,30 @@ describe('handleAtPoint', () => {
 
   it('returns null away from every handle', () => {
     expect(handleAtPoint(rect, { x: 200, y: 150 })).toBeNull()
+  })
+
+  it('catches a corner from outside the drawn handle', () => {
+    const justOutsideDrawn = { x: 300 - HANDLE_SIZE, y: 200 - HANDLE_SIZE }
+    const drawn = handleRects(rect).find((h) => h.id === 'se')!.rect
+    expect(rectContains(drawn, justOutsideDrawn)).toBe(false)
+    expect(handleAtPoint(rect, justOutsideDrawn)).toBe('se')
+  })
+
+  it('widens the grab area in image pixels as the image is zoomed out', () => {
+    const point = { x: 285, y: 185 }
+    expect(handleAtPoint(rect, point, 1)).toBeNull()
+    expect(handleAtPoint(rect, point, 0.25)).toBe('se')
+  })
+
+  it('keeps the middle of a small frame draggable instead of all handle', () => {
+    const small = { x: 0, y: 0, width: 60, height: 40 }
+    expect(handleAtPoint(small, { x: 30, y: 20 }, 0.2)).toBeNull()
+  })
+
+  it('picks the corner, not the edge, where two grab areas overlap', () => {
+    // Below the minimum grab size the corner and edge areas start to overlap.
+    const tiny = { x: 0, y: 0, width: 12, height: 12 }
+    expect(handleAtPoint(tiny, { x: 3, y: 0 })).toBe('nw')
   })
 })
 
