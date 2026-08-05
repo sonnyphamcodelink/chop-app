@@ -1419,7 +1419,7 @@ Create `tests/main/permissions.test.ts`:
 
 ```ts
 import { describe, expect, it } from 'vitest'
-import { permissionMessage } from '../../src/main/permissions'
+import { permissionMessage } from '../../src/main/permissions-message'
 
 describe('permissionMessage', () => {
   it('explains how to grant permission when denied', () => {
@@ -1447,12 +1447,48 @@ describe('permissionMessage', () => {
 Run: `npx vitest run tests/main/permissions.test.ts`
 Expected: FAIL — module not found.
 
-- [ ] **Step 3: Write `src/main/permissions.ts`**
+- [ ] **Step 3: Write the pure message module**
+
+`permissionMessage` is pure copy, so it lives in its own electron-free module and
+the unit test imports it directly. A test that imported `permissions.ts` would
+pull in `electron` and fail to resolve under Vitest.
+
+Create `src/main/permissions-message.ts`:
+
+```ts
+export type PermissionState = 'granted' | 'denied' | 'not-determined' | 'unsupported'
+
+/** Actionable guidance for each permission state. Empty when nothing is wrong. */
+export function permissionMessage(state: PermissionState): string {
+  switch (state) {
+    case 'denied':
+      return (
+        'Chop needs Screen Recording permission to capture your screen.\n\n' +
+        'Open System Settings \u2192 Privacy & Security \u2192 Screen Recording, ' +
+        'enable Chop, then relaunch the app.'
+      )
+    case 'not-determined':
+      return (
+        'Chop needs Screen Recording permission to capture your screen.\n\n' +
+        'macOS will ask for it the first time you capture. If no prompt appears, ' +
+        'grant it in System Settings \u2192 Privacy & Security \u2192 Screen Recording.'
+      )
+    default:
+      return ''
+  }
+}
+```
+
+- [ ] **Step 4: Write the electron-facing permission module**
+
+Create `src/main/permissions.ts`:
 
 ```ts
 import { dialog, shell, systemPreferences } from 'electron'
+import { type PermissionState, permissionMessage } from './permissions-message'
 
-export type PermissionState = 'granted' | 'denied' | 'not-determined' | 'unsupported'
+export { permissionMessage }
+export type { PermissionState }
 
 const SETTINGS_URL =
   'x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture'
@@ -1463,26 +1499,6 @@ export function screenPermissionState(): PermissionState {
   if (status === 'granted') return 'granted'
   if (status === 'denied' || status === 'restricted') return 'denied'
   return 'not-determined'
-}
-
-/** Pure so the copy can be tested without Electron. */
-export function permissionMessage(state: PermissionState): string {
-  switch (state) {
-    case 'denied':
-      return (
-        'Chop needs Screen Recording permission to capture your screen.\n\n' +
-        'Open System Settings → Privacy & Security → Screen Recording, ' +
-        'enable Chop, then relaunch the app.'
-      )
-    case 'not-determined':
-      return (
-        'Chop needs Screen Recording permission to capture your screen.\n\n' +
-        'macOS will ask for it the first time you capture. If no prompt appears, ' +
-        'grant it in System Settings → Privacy & Security → Screen Recording.'
-      )
-    default:
-      return ''
-  }
 }
 
 export async function openScreenRecordingSettings(): Promise<void> {
@@ -1507,15 +1523,15 @@ export async function ensureScreenPermission(): Promise<boolean> {
 }
 ```
 
-- [ ] **Step 4: Run the test and verify it passes**
+- [ ] **Step 5: Run the test and verify it passes**
 
 Run: `npx vitest run tests/main/permissions.test.ts`
 Expected: PASS — 4 tests.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add src/main/permissions.ts tests/main/permissions.test.ts
+git add src/main/permissions.ts src/main/permissions-message.ts tests/main/permissions.test.ts
 git commit -m "feat: add macOS screen recording permission handling"
 ```
 
@@ -1541,7 +1557,7 @@ Create `tests/main/capture/capture-service.test.ts`:
 
 ```ts
 import { describe, expect, it } from 'vitest'
-import { matchSourceToDisplay } from '../../../src/main/capture/capture-service'
+import { matchSourceToDisplay } from '../../../src/main/capture/source-match'
 
 type FakeSource = { id: string; display_id: string; name: string }
 
@@ -1577,19 +1593,16 @@ describe('matchSourceToDisplay', () => {
 Run: `npx vitest run tests/main/capture/capture-service.test.ts`
 Expected: FAIL — module not found.
 
-- [ ] **Step 3: Write `src/main/capture/capture-service.ts`**
+- [ ] **Step 3: Write the pure source-matching module**
+
+`matchSourceToDisplay` and `toDisplayInfo` are pure and must stay unit-testable,
+so they live in an electron-free module. `Electron.Display` is referenced as a
+TYPE only, which erases at compile time and pulls in no runtime dependency.
+
+Create `src/main/capture/source-match.ts`:
 
 ```ts
-import { desktopCapturer, screen } from 'electron'
-import { type DisplayInfo, physicalSize } from '@shared/coords'
-import { ensureScreenPermission } from '../permissions'
-
-/** A full-resolution frozen screenshot of one display. */
-export type DisplayCapture = {
-  readonly display: DisplayInfo
-  /** PNG data URL at true physical pixel resolution. */
-  readonly dataUrl: string
-}
+import type { DisplayInfo } from '@shared/coords'
 
 type SourceLike = { readonly id: string; readonly display_id: string }
 
@@ -1619,6 +1632,26 @@ export function matchSourceToDisplay<T extends SourceLike>(
   if (byId) return byId
   if (index === undefined) return null
   return sources[index] ?? null
+}
+```
+
+- [ ] **Step 4: Write the capture service**
+
+Create `src/main/capture/capture-service.ts`:
+
+```ts
+import { desktopCapturer, screen } from 'electron'
+import { type DisplayInfo, physicalSize } from '@shared/coords'
+import { ensureScreenPermission } from '../permissions'
+import { matchSourceToDisplay, toDisplayInfo } from './source-match'
+
+export { matchSourceToDisplay, toDisplayInfo }
+
+/** A full-resolution frozen screenshot of one display. */
+export type DisplayCapture = {
+  readonly display: DisplayInfo
+  /** PNG data URL at true physical pixel resolution. */
+  readonly dataUrl: string
 }
 
 /**
@@ -1659,12 +1692,12 @@ export async function captureAllDisplays(): Promise<readonly DisplayCapture[]> {
 }
 ```
 
-- [ ] **Step 4: Run the test and verify it passes**
+- [ ] **Step 5: Run the test and verify it passes**
 
 Run: `npx vitest run tests/main/capture/capture-service.test.ts`
 Expected: PASS — 4 tests.
 
-- [ ] **Step 5: Manually verify true-resolution capture**
+- [ ] **Step 6: Manually verify true-resolution capture**
 
 Add a temporary line at the end of `app.whenReady()` in `src/main/index.ts`:
 
@@ -1677,7 +1710,7 @@ void captureAllDisplays().then((captures) =>
 Run: `npm run dev`
 Expected: one entry per display, each `bytes` in the hundreds of thousands or more. Grant the Screen Recording prompt if it appears. Remove the temporary line afterwards.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add -A
@@ -1830,7 +1863,7 @@ Create `tests/main/capture/overlay-manager.test.ts`:
 
 ```ts
 import { describe, expect, it } from 'vitest'
-import { windowsForDisplay } from '../../../src/main/capture/overlay-manager'
+import { windowsForDisplay } from '../../../src/main/capture/overlay-layout'
 import type { DisplayInfo } from '@shared/coords'
 import type { WindowRect } from '@shared/window-rect'
 
@@ -1882,16 +1915,17 @@ describe('windowsForDisplay', () => {
 Run: `npx vitest run tests/main/capture/overlay-manager.test.ts`
 Expected: FAIL — module not found.
 
-- [ ] **Step 3: Write `src/main/capture/overlay-manager.ts`**
+- [ ] **Step 3: Write the pure overlay layout module**
+
+`windowsForDisplay` is pure and must stay unit-testable, so it lives in an
+electron-free module.
+
+Create `src/main/capture/overlay-layout.ts`:
 
 ```ts
-import { BrowserWindow, ipcMain } from 'electron'
-import { join } from 'node:path'
 import { type DisplayInfo, globalToLocal } from '@shared/coords'
 import { rectIntersect } from '@shared/geometry'
-import { CHANNELS, type OverlayInit, type OverlaySelection } from '@shared/ipc'
 import type { WindowRect } from '@shared/window-rect'
-import type { DisplayCapture } from './capture-service'
 
 /** Windows intersecting this display, converted to display-local DIP coordinates. */
 export function windowsForDisplay(
@@ -1903,6 +1937,20 @@ export function windowsForDisplay(
     return [{ ...window, bounds: globalToLocal(window.bounds, display) }]
   })
 }
+```
+
+- [ ] **Step 4: Write `src/main/capture/overlay-manager.ts`**
+
+```ts
+import { BrowserWindow, ipcMain } from 'electron'
+import { join } from 'node:path'
+import type { DisplayInfo } from '@shared/coords'
+import { CHANNELS, type OverlayInit, type OverlaySelection } from '@shared/ipc'
+import type { WindowRect } from '@shared/window-rect'
+import type { DisplayCapture } from './capture-service'
+import { windowsForDisplay } from './overlay-layout'
+
+export { windowsForDisplay }
 
 function createOverlayWindow(display: DisplayInfo): BrowserWindow {
   const overlay = new BrowserWindow({
@@ -1993,7 +2041,7 @@ export async function showOverlays(
 }
 ```
 
-- [ ] **Step 4: Write the preload bridge**
+- [ ] **Step 5: Write the preload bridge**
 
 Replace `src/preload/overlay.ts`:
 
@@ -2014,7 +2062,7 @@ contextBridge.exposeInMainWorld('chopOverlay', {
 })
 ```
 
-- [ ] **Step 5: Write the overlay markup**
+- [ ] **Step 6: Write the overlay markup**
 
 Replace `src/renderer/overlay/index.html`:
 
@@ -2087,7 +2135,7 @@ Replace `src/renderer/overlay/index.html`:
 </html>
 ```
 
-- [ ] **Step 6: Write the overlay logic**
+- [ ] **Step 7: Write the overlay logic**
 
 Create `src/renderer/overlay/main.ts`:
 
@@ -2196,12 +2244,12 @@ document.addEventListener('keydown', (event) => {
 window.addEventListener('blur', () => clearRect())
 ```
 
-- [ ] **Step 7: Run the test and verify it passes**
+- [ ] **Step 8: Run the test and verify it passes**
 
 Run: `npx vitest run tests/main/capture/overlay-manager.test.ts`
 Expected: PASS — 4 tests.
 
-- [ ] **Step 8: Manually verify the overlay**
+- [ ] **Step 9: Manually verify the overlay**
 
 Temporarily replace the body of `app.whenReady()` in `src/main/index.ts` with:
 
@@ -2214,7 +2262,7 @@ console.info('selection:', await showOverlays(captures, windows))
 Run: `npm run dev`
 Expected: the screen freezes and dims; moving the cursor highlights whole windows with the app name and size; clicking logs a `window` selection; dragging logs a `region` selection; Escape logs `null`. Verify on both displays. Restore `src/main/index.ts` afterwards.
 
-- [ ] **Step 9: Commit**
+- [ ] **Step 10: Commit**
 
 ```bash
 git add -A
