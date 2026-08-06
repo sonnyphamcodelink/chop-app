@@ -1,4 +1,12 @@
-import { REGION_RETICLE_CURSOR } from '@shared/cursor'
+import {
+  REGION_ARM_GAP,
+  REGION_ARM_LENGTH,
+  REGION_ARM_WEIGHT,
+  REGION_GUIDE_THICKNESS,
+  REGION_RETICLE_CURSOR,
+  WINDOW_FRAME_DASH,
+  WINDOW_FRAME_GAP,
+} from '@shared/cursor'
 import { isDegenerateRect, normalizeRect, type Point, type Rect } from '@shared/geometry'
 import type { OverlayInit, OverlaySelection } from '@shared/ipc'
 import { windowAtPoint, type WindowRect } from '@shared/window-rect'
@@ -19,26 +27,33 @@ const hint = document.querySelector<HTMLDivElement>('#hint')!
 const inputLayer = document.querySelector<HTMLDivElement>('#input-layer')!
 const crossX = document.querySelector<HTMLDivElement>('#cross-x')!
 const crossY = document.querySelector<HTMLDivElement>('#cross-y')!
+const reticle = document.querySelector<HTMLDivElement>('#reticle')!
+const guides = [crossX, crossY, reticle]
 
-document.documentElement.style.setProperty('--cursor', REGION_RETICLE_CURSOR)
+const rootStyle = document.documentElement.style
+rootStyle.setProperty('--cursor', REGION_RETICLE_CURSOR)
+rootStyle.setProperty('--guide', `${REGION_GUIDE_THICKNESS}px`)
+rootStyle.setProperty('--arm-length', `${REGION_ARM_LENGTH}px`)
+rootStyle.setProperty('--arm-gap', `${REGION_ARM_GAP}px`)
+rootStyle.setProperty('--arm-weight', `${REGION_ARM_WEIGHT}px`)
+rootStyle.setProperty('--dash', `${WINDOW_FRAME_DASH}px`)
+rootStyle.setProperty('--period', `${WINDOW_FRAME_DASH + WINDOW_FRAME_GAP}px`)
 
 let state: OverlayInit | null = null
 let dragOrigin: Point | null = null
 let currentRect: Rect | null = null
 
-/** Matches --guide in the stylesheet; the guides straddle the pointer. */
-const GUIDE_THICKNESS = 2
-
 function moveCrosshair(point: Point): void {
-  crossX.style.display = 'block'
-  crossY.style.display = 'block'
-  crossX.style.top = `${point.y - GUIDE_THICKNESS / 2}px`
-  crossY.style.left = `${point.x - GUIDE_THICKNESS / 2}px`
+  for (const guide of guides) guide.style.display = 'block'
+  crossX.style.top = `${point.y - REGION_GUIDE_THICKNESS / 2}px`
+  crossY.style.left = `${point.x - REGION_GUIDE_THICKNESS / 2}px`
+  // The reticle is a zero-size box at the pointer; its arms hang off the sides.
+  reticle.style.left = `${point.x}px`
+  reticle.style.top = `${point.y}px`
 }
 
 function hideCrosshair(): void {
-  crossX.style.display = 'none'
-  crossY.style.display = 'none'
+  for (const guide of guides) guide.style.display = 'none'
 }
 
 function showRect(rect: Rect, caption: string, kind: 'window' | 'region'): void {

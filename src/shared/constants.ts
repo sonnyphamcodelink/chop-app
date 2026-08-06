@@ -52,6 +52,15 @@ export const CALLOUT_MIN_TAIL_LENGTH = 28
 /** Edge length of a callout's delete badge as drawn, in canvas pixels. */
 export const CALLOUT_BADGE_SIZE = 22
 
+/** Diameter of the round handle that drags a callout's tail, in canvas pixels. */
+export const CALLOUT_TAIL_HANDLE_SIZE = 16
+
+/**
+ * Callout text is sized to fill its bubble rather than set by the toolbar, so a
+ * big note reads big. This is the floor, below which the bubble grows instead.
+ */
+export const CALLOUT_MIN_FONT_SIZE = 10
+
 /** How far a pointer may travel before a callout click counts as a drag, in canvas pixels. */
 export const CALLOUT_DRAG_THRESHOLD = 3
 

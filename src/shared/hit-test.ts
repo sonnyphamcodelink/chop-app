@@ -1,4 +1,4 @@
-import { calloutBadgeRect } from './callout'
+import { calloutBadgeRect, calloutTailHandleRect } from './callout'
 import { HANDLE_HIT_SIZE, HANDLE_SIZE } from './constants'
 import type {
   Annotation,
@@ -80,17 +80,22 @@ export function annotationAtPoint(
   return null
 }
 
-/** Which part of a callout the pointer is over. */
-export type CalloutHit = {
-  readonly callout: CalloutAnnotation
-  /** `badge` is the delete control; `body` is the bubble itself. */
-  readonly part: 'badge' | 'body'
-}
+/**
+ * Which part of a callout the pointer is over: the delete badge, the round
+ * handle that aims the tail, one of the eight resize handles, or the bubble.
+ */
+export type CalloutHit =
+  | { readonly callout: CalloutAnnotation; readonly part: 'badge' | 'tail' | 'body' }
+  | {
+      readonly callout: CalloutAnnotation
+      readonly part: 'handle'
+      readonly handle: HandleId
+    }
 
 /**
- * Front-most callout under the point, or null. Only the bubble and its badge
- * count: the tail leaves a large empty area inside the annotation bounds.
- * `scale` is CSS pixels per image pixel, which fixes the badge's grab area.
+ * Front-most callout under the point, or null. Controls are tested before the
+ * bubble, and the tail's own grab area before the bubble's handles. `scale` is
+ * CSS pixels per image pixel, which keeps every grab area constant on screen.
  */
 export function calloutHitAtPoint(
   doc: CaptureDocument,
@@ -100,10 +105,16 @@ export function calloutHitAtPoint(
   for (let index = doc.annotations.length - 1; index >= 0; index -= 1) {
     const annotation = doc.annotations[index]!
     if (annotation.kind !== 'callout') continue
+
     // The badge straddles the corner, so it is tested before the bubble.
     if (rectContains(calloutBadgeRect(annotation.rect, scale), point)) {
       return { callout: annotation, part: 'badge' }
     }
+    if (rectContains(calloutTailHandleRect(annotation.tail, scale), point)) {
+      return { callout: annotation, part: 'tail' }
+    }
+    const handle = handleAtPoint(annotation.rect, point, scale)
+    if (handle) return { callout: annotation, part: 'handle', handle }
     if (rectContains(annotation.rect, point)) {
       return { callout: annotation, part: 'body' }
     }

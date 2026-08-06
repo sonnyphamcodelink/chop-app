@@ -95,12 +95,18 @@ describe('callouts', () => {
       rect: { x: 10, y: 10, width: 100, height: 80 },
       text: '',
       color: '#ff3b30',
-      fontSize: 18,
     })
   })
 
+  it('sizes the text to the bubble rather than to the toolbar font size', () => {
+    const small = createCallout({ x: 0, y: 0, width: 100, height: 40 }, style, 'c0')
+    const large = createCallout({ x: 0, y: 0, width: 400, height: 200 }, style, 'c1')
+    expect(large.fontSize).toBeGreaterThan(small.fontSize)
+    expect(large.fontSize).toBeGreaterThan(style.fontSize)
+  })
+
   it('points the tail below the bubble by default', () => {
-    const callout = createCallout({ x: 0, y: 0, width: 100, height: 40 }, 'hi', style, 'c1')
+    const callout = createCallout({ x: 0, y: 0, width: 100, height: 40 }, style, 'c1')
     expect(callout.tail.x).toBe(50)
     expect(callout.tail.y).toBeGreaterThan(40)
   })

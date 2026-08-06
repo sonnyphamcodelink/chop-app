@@ -1,5 +1,5 @@
 import { setCrop, type CaptureDocument } from './document'
-import { fullImageRect, initialCropRect } from './crop-session'
+import { type CropSession, initialCropRect } from './crop-session'
 import {
   createHistory,
   type History,
@@ -15,8 +15,8 @@ export type EditorState = {
   readonly tool: ToolId
   readonly style: ToolStyle
   readonly draft: Draft | null
-  /** Working crop frame while Crop is active; null otherwise. */
-  readonly cropSession: { readonly rect: Rect } | null
+  /** Working crop frame: the Crop tool's, or a trim drag in any other tool. */
+  readonly cropSession: CropSession | null
   /** Annotation under the pointer (handles / callout badge). */
   readonly hoveredAnnotationId: string | null
   /** Callout whose note is being typed, whose text the overlay draws instead. */
@@ -50,36 +50,50 @@ export function currentDocument(state: EditorState): CaptureDocument {
 
 export function setTool(state: EditorState, tool: ToolId): EditorState {
   if (tool === 'crop') {
-    return {
-      ...state,
-      tool,
-      draft: null,
-      cropSession: { rect: initialCropRect(currentDocument(state)) },
-    }
+    return { ...state, tool, draft: null, cropSession: reframeSession(currentDocument(state)) }
   }
   return { ...state, tool, draft: null, cropSession: null }
 }
 
-export function setCropSession(state: EditorState, rect: Rect | null): EditorState {
-  return {
-    ...state,
-    cropSession: rect ? { rect } : null,
-  }
+function reframeSession(doc: CaptureDocument): CropSession {
+  return { rect: initialCropRect(doc), mode: 'reframe' }
 }
 
-export function commitCrop(state: EditorState): EditorState {
+/**
+ * Starts a trim: the crop frame every non-Crop tool offers on the edges of the
+ * view it draws on. It lasts only as long as the drag that opened it.
+ */
+export function beginTrim(state: EditorState, rect: Rect): EditorState {
+  return { ...state, draft: null, cropSession: { rect, mode: 'trim' } }
+}
+
+/** Moves the working frame, leaving the kind of session it is alone. */
+export function setCropRect(state: EditorState, rect: Rect): EditorState {
   if (!state.cropSession) return state
-  const rect = state.cropSession.rect
+  return { ...state, cropSession: { ...state.cropSession, rect } }
+}
+
+export function endCropSession(state: EditorState): EditorState {
+  if (!state.cropSession) return state
+  return { ...state, cropSession: null }
+}
+
+/**
+ * Folds the working frame into the document. A trim ends there — releasing the
+ * mouse is what applied it. A reframe keeps its session, so the Crop tool stays
+ * live on the frame it just committed.
+ */
+export function commitCrop(state: EditorState): EditorState {
+  const session = state.cropSession
+  if (!session) return state
   const doc = currentDocument(state)
-  const unchanged = doc.cropRect
-    ? rectsEqual(doc.cropRect, rect)
-    : rectsEqual(fullImageRect(doc), rect)
-  if (unchanged) return state
-  return {
-    ...commitDocument(state, setCrop(doc, rect)),
-    cropSession: { rect },
-    tool: 'crop',
+  if (rectsEqual(initialCropRect(doc), session.rect)) {
+    return session.mode === 'trim' ? endCropSession(state) : state
   }
+  const committed = commitDocument(state, setCrop(doc, session.rect))
+  return session.mode === 'trim'
+    ? endCropSession(committed)
+    : { ...committed, cropSession: session }
 }
 
 export function setStyle(state: EditorState, patch: Partial<ToolStyle>): EditorState {
@@ -127,12 +141,12 @@ export function undoState(state: EditorState): EditorState {
   const history = undo(state.history)
   const next = { ...state, history, draft: null }
   if (next.tool !== 'crop') return { ...next, cropSession: null }
-  return { ...next, cropSession: { rect: initialCropRect(history.present) } }
+  return { ...next, cropSession: reframeSession(history.present) }
 }
 
 export function redoState(state: EditorState): EditorState {
   const history = redo(state.history)
   const next = { ...state, history, draft: null }
   if (next.tool !== 'crop') return { ...next, cropSession: null }
-  return { ...next, cropSession: { rect: initialCropRect(history.present) } }
+  return { ...next, cropSession: reframeSession(history.present) }
 }

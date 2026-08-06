@@ -1,4 +1,4 @@
-import { defaultTailPoint } from './callout'
+import { calloutFontSizeFor, defaultTailPoint } from './callout'
 import {
   CALLOUT_DEFAULT_HEIGHT_RATIO,
   CALLOUT_DEFAULT_WIDTH_RATIO,
@@ -66,20 +66,19 @@ export function calloutRect(draft: Draft, style: ToolStyle): Rect {
   }
 }
 
-export function createCallout(
-  rect: Rect,
-  text: string,
-  style: ToolStyle,
-  id: string,
-): CalloutAnnotation {
+/**
+ * A bubble with no note yet. The font size belongs to the bubble, not the
+ * toolbar: it is refitted whenever the note or the bubble changes.
+ */
+export function createCallout(rect: Rect, style: ToolStyle, id: string): CalloutAnnotation {
   return {
     id,
     kind: 'callout',
     rect,
     tail: defaultTailPoint(rect),
-    text,
+    text: '',
     color: style.color,
-    fontSize: style.fontSize,
+    fontSize: calloutFontSizeFor(rect),
   }
 }
 
@@ -110,8 +109,8 @@ export function draftToAnnotation(
     case 'blur':
       return { id, kind: 'blur', rect }
     case 'callout':
-      // Empty until the text input commits: the drag only sizes the bubble.
-      return createCallout(rect, '', style, id)
+      // Empty until the note is typed onto it: the drag only sizes the bubble.
+      return createCallout(rect, style, id)
     default:
       return null
   }

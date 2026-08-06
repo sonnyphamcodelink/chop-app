@@ -1,6 +1,6 @@
-import { calloutBadgeRect, hideCalloutText } from '@shared/callout'
+import { calloutBadgeRect, calloutTailHandleRect, hideCalloutText } from '@shared/callout'
 import { backingScale, fitScale, imageToView, viewToImage } from '@shared/canvas-mapping'
-import { fullImageRect } from '@shared/crop-session'
+import { cropBounds } from '@shared/crop-session'
 import { type CaptureDocument, outputSize } from '@shared/document'
 import type { EditorState } from '@shared/editor-state'
 import { currentDocument } from '@shared/editor-state'
@@ -79,9 +79,9 @@ export function createCanvasView(canvas: HTMLCanvasElement): CanvasView {
   /** CSS pixels per image pixel (on-screen size). Hit-testing uses this. */
   let currentScale = 1
 
-  /** A live crop session draws the whole image, so it has no crop offset. */
+  /** Reframing draws the whole image, so it has no crop offset. Trimming keeps it. */
   function cropOrigin(state: EditorState): Rect | null {
-    if (state.tool === 'crop' && state.cropSession) return null
+    if (state.cropSession?.mode === 'reframe') return null
     return currentDocument(state).cropRect
   }
 
@@ -91,14 +91,59 @@ export function createCanvasView(canvas: HTMLCanvasElement): CanvasView {
     return ctx
   }
 
+  /**
+   * The eight grab points of a crop frame, nudged inward where the frame sits on
+   * the edge of `bounds` so the complete circle and its border show.
+   */
+  function drawFrameHandles(
+    ctx: CanvasRenderingContext2D,
+    rect: Rect,
+    bounds: Rect,
+    scale: number,
+  ): void {
+    const outerRadius = resizeHandleRadius(scale) + 0.5 / scale
+    for (const handle of handleRects(rect)) {
+      const cx = clamp(
+        handle.rect.x + handle.rect.width / 2,
+        bounds.x + outerRadius,
+        bounds.x + bounds.width - outerRadius,
+      )
+      const cy = clamp(
+        handle.rect.y + handle.rect.height / 2,
+        bounds.y + outerRadius,
+        bounds.y + bounds.height - outerRadius,
+      )
+      drawResizeHandle(ctx, { x: cx, y: cy }, scale)
+    }
+  }
+
+  /**
+   * The trim affordance every non-Crop tool carries: the handles alone, on the
+   * edges of the view, with nothing dimmed until one of them is dragged.
+   */
+  function drawTrimAffordance(
+    ctx: CanvasRenderingContext2D,
+    state: EditorState,
+    scale: number,
+  ): void {
+    if (state.tool === 'crop' || state.cropSession) return
+    const rect = cropBounds(currentDocument(state), 'trim')
+    ctx.save()
+    ctx.translate(-rect.x, -rect.y)
+    drawFrameHandles(ctx, rect, rect, scale)
+    ctx.restore()
+  }
+
   function drawCropSession(ctx: CanvasRenderingContext2D, state: EditorState, scale: number): void {
     const session = state.cropSession
-    if (state.tool !== 'crop' || !session) return
+    if (!session) return
     const doc = currentDocument(state)
-    const bounds = fullImageRect(doc)
+    const bounds = cropBounds(doc, session.mode)
     const { rect } = session
 
     ctx.save()
+    // A trim frame is drawn over the cropped view, which starts at the crop origin.
+    if (session.mode === 'trim') ctx.translate(-bounds.x, -bounds.y)
     ctx.fillStyle = 'rgba(0, 0, 0, 0.45)'
     ctx.fillRect(bounds.x, bounds.y, bounds.width, Math.max(0, rect.y - bounds.y))
     ctx.fillRect(
@@ -120,21 +165,7 @@ export function createCanvasView(canvas: HTMLCanvasElement): CanvasView {
     ctx.setLineDash([4 / scale, 3 / scale])
     ctx.strokeRect(rect.x, rect.y, rect.width, rect.height)
     ctx.setLineDash([])
-    for (const handle of handleRects(rect)) {
-      // Nudge boundary handles inward so the complete circle and border show.
-      const outerRadius = resizeHandleRadius(scale) + 0.5 / scale
-      const cx = clamp(
-        handle.rect.x + handle.rect.width / 2,
-        bounds.x + outerRadius,
-        bounds.x + bounds.width - outerRadius,
-      )
-      const cy = clamp(
-        handle.rect.y + handle.rect.height / 2,
-        bounds.y + outerRadius,
-        bounds.y + bounds.height - outerRadius,
-      )
-      drawResizeHandle(ctx, { x: cx, y: cy }, scale)
-    }
+    drawFrameHandles(ctx, rect, bounds, scale)
     ctx.restore()
   }
 
@@ -157,6 +188,19 @@ export function createCanvasView(canvas: HTMLCanvasElement): CanvasView {
     if (doc.cropRect) ctx.translate(-doc.cropRect.x, -doc.cropRect.y)
 
     if (annotation.kind === 'callout') {
+      // Same handles as the crop frame, plus one on the tail tip for aiming it.
+      for (const handle of handleRects(annotation.rect)) {
+        drawResizeHandle(
+          ctx,
+          {
+            x: handle.rect.x + handle.rect.width / 2,
+            y: handle.rect.y + handle.rect.height / 2,
+          },
+          scale,
+        )
+      }
+      drawResizeHandle(ctx, annotation.tail, scale)
+
       const badge = calloutBadgeRect(annotation.rect, scale)
       const radius = badge.width / 2
       const centre = { x: badge.x + radius, y: badge.y + radius }
@@ -200,11 +244,11 @@ export function createCanvasView(canvas: HTMLCanvasElement): CanvasView {
 
     render(state: EditorState): void {
       if (!image) return
-      const inCropSession = state.tool === 'crop' && !!state.cropSession
+      const reframing = state.cropSession?.mode === 'reframe'
       const baseDoc = state.editingCalloutId
         ? hideCalloutText(currentDocument(state), state.editingCalloutId)
         : currentDocument(state)
-      const doc = inCropSession
+      const doc = reframing
         ? { ...baseDoc, cropRect: null }
         : documentWithDraft(baseDoc, state.draft, state.style)
       const size = outputSize(doc)
@@ -233,8 +277,9 @@ export function createCanvasView(canvas: HTMLCanvasElement): CanvasView {
       ctx.imageSmoothingQuality = 'high'
       ctx.scale(bufferScale, bufferScale)
       renderDocument(ctx, image, doc, browserCanvasFactory)
+      drawTrimAffordance(ctx, state, currentScale)
       drawCropSession(ctx, state, currentScale)
-      if (!inCropSession) drawAnnotationChrome(ctx, state, doc, currentScale)
+      if (!reframing) drawAnnotationChrome(ctx, state, doc, currentScale)
       ctx.restore()
     },
 

@@ -225,6 +225,67 @@ test('a callout can be dragged around the capture and deleted from its badge', a
     .toEqual([])
 })
 
+test('a callout resizes from its handles and aims its tail, resizing its text to match', async () => {
+  await sendCapture({
+    id: 'e2e-callout-resize',
+    dataUrl: ONE_PIXEL_PNG,
+    width: 400,
+    height: 300,
+    createdAt: new Date().toISOString(),
+  })
+
+  const page = await app.firstWindow()
+  await expect(page.locator('#empty')).toBeHidden()
+  await page.getByRole('button', { name: 'Callout' }).click()
+
+  const box = await page.locator('#canvas').boundingBox()
+  if (!box) throw new Error('canvas has no bounding box')
+  const at = (x: number, y: number): { x: number; y: number } => ({
+    x: box.x + x,
+    y: box.y + y,
+  })
+
+  async function drag(from: { x: number; y: number }, to: { x: number; y: number }) {
+    await page.mouse.move(from.x, from.y)
+    await page.mouse.down()
+    await page.mouse.move(to.x, to.y, { steps: 10 })
+    await page.mouse.up()
+  }
+
+  await drag(at(40, 40), at(200, 100))
+  await expect
+    .poll(async () => (await savedCallout())?.rect.width, { timeout: 10_000 })
+    .toBeGreaterThan(0)
+  const drawn = await savedCallout()
+
+  // Write a note so there is text to re-size with the bubble.
+  await page.mouse.click(at(120, 70).x, at(120, 70).y)
+  await page.keyboard.type('resize me')
+  await page.keyboard.press('Enter')
+  await expect
+    .poll(async () => (await savedCallout())?.text, { timeout: 10_000 })
+    .toBe('resize me')
+  const typed = await savedCallout()
+
+  // Drag the south-east handle out: the bubble grows and so does its text.
+  await drag(at(200, 100), at(300, 200))
+  await expect
+    .poll(async () => (await savedCallout())?.rect.height, { timeout: 10_000 })
+    .toBeCloseTo(drawn.rect.height + 100, 0)
+  const enlarged = await savedCallout()
+  expect(enlarged.rect.width).toBeCloseTo(drawn.rect.width + 100, 0)
+  expect(enlarged.fontSize).toBeGreaterThan(typed.fontSize)
+
+  // Drag the round handle on the tail tip: only the tail moves.
+  await drag(at(enlarged.tail.x, enlarged.tail.y), at(340, 60))
+  await expect
+    .poll(async () => (await savedCallout())?.tail.x, { timeout: 10_000 })
+    .toBeCloseTo(340, 0)
+  const aimed = await savedCallout()
+  expect(aimed.tail.y).toBeCloseTo(60, 0)
+  expect(aimed.rect).toEqual(enlarged.rect)
+})
+
 test('a callout is drawn empty, then clicked to write and rewrite its note', async () => {
   await sendCapture({
     id: 'e2e-callout',
@@ -290,6 +351,7 @@ async function savedCallout(): Promise<{
   rect: { x: number; y: number; width: number; height: number }
   tail: { x: number; y: number }
   text: string
+  fontSize: number
 }> {
   const annotations = (await savedAnnotations()) as
     | readonly { kind: string }[]

@@ -2,12 +2,33 @@ import { MIN_SELECTION_DIMENSION } from './constants'
 import type { CaptureDocument } from './document'
 import type { Rect } from './geometry'
 
+/**
+ * How a working crop frame behaves, and what the canvas shows behind it.
+ *
+ * `reframe` is the Crop tool: the whole capture is shown so the frame can be
+ * pushed back out past an existing crop, and Enter applies it. `trim` is the
+ * same frame in every other tool — it sits on the cropped view being drawn on,
+ * so it can only cut further in, and it is applied on mouse release.
+ */
+export type CropMode = 'reframe' | 'trim'
+
+/** The crop frame being adjusted right now. Not part of the document until applied. */
+export type CropSession = {
+  readonly rect: Rect
+  readonly mode: CropMode
+}
+
 export function fullImageRect(doc: CaptureDocument): Rect {
   return { x: 0, y: 0, width: doc.width, height: doc.height }
 }
 
 export function initialCropRect(doc: CaptureDocument): Rect {
   return doc.cropRect ?? fullImageRect(doc)
+}
+
+/** The region a working frame may occupy, which is also the region on screen. */
+export function cropBounds(doc: CaptureDocument, mode: CropMode): Rect {
+  return mode === 'reframe' ? fullImageRect(doc) : initialCropRect(doc)
 }
 
 /**

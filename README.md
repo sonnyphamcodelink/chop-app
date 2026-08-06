@@ -28,6 +28,14 @@ System Settings → Privacy & Security → Screen Recording and relaunch.
     npm run test:coverage   # enforce the 80% floor on src/shared
     npm run e2e             # end-to-end tests
     npm run typecheck
+    npm run build:icons     # re-render the app and tray icons from the mark
 
 Platform-specific code that cannot run in CI is covered by
 `docs/manual-smoke-tests.md`.
+
+## Brand
+
+The Chop mark lives in `scripts/logo.mjs`. `npm run build:icons` renders it into
+`resources/logo.svg`, `build/icon.png` (app and installer icon) and the
+`resources/tray-icon*.png` template images; all four are checked in, so run it
+only after changing the mark.

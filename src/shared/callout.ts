@@ -1,9 +1,11 @@
 import {
   CALLOUT_BADGE_SIZE,
   CALLOUT_LINE_HEIGHT_RATIO,
+  CALLOUT_MIN_FONT_SIZE,
   CALLOUT_MIN_TAIL_LENGTH,
   CALLOUT_MIN_TAIL_WIDTH,
   CALLOUT_PADDING,
+  CALLOUT_TAIL_HANDLE_SIZE,
   CALLOUT_TAIL_LENGTH_RATIO,
   CALLOUT_TAIL_WIDTH_RATIO,
 } from './constants'
@@ -65,8 +67,8 @@ export function tailTriangle(rect: Rect, tail: Point): TailTriangle {
 }
 
 /**
- * Grows a bubble downwards until its wrapped text fits. The drag sets the width
- * and a minimum height; the text decides the rest, so a note is never cut off.
+ * Grows a bubble downwards until its wrapped text fits. Only reached once the
+ * text has already been shrunk to the minimum readable size.
  */
 export function fitCalloutRect(
   rect: Rect,
@@ -80,18 +82,68 @@ export function fitCalloutRect(
   return needed <= rect.height ? rect : { ...rect, height: needed }
 }
 
+/** Measures text at a given font size. Injected so fitting stays testable. */
+export type FontMeasurer = (fontSize: number) => (text: string) => number
+
+/** The tallest single line that fits the bubble: the ceiling for auto-sizing. */
+export function calloutFontSizeFor(rect: Rect): number {
+  const usable = rect.height - CALLOUT_PADDING * 2
+  return Math.max(CALLOUT_MIN_FONT_SIZE, Math.floor(usable / CALLOUT_LINE_HEIGHT_RATIO))
+}
+
 /**
- * Rewrites a callout's note. The bubble grows if the new text needs the room,
- * and the tail follows the bottom edge when it does.
+ * The largest font whose wrapped text still fits the bubble. Callout text is
+ * sized by the bubble rather than by the toolbar, so a note drawn large reads
+ * large. Fitting is monotonic in font size, so this bisects rather than counts
+ * down: a resize refits on every frame of the drag.
  */
+export function fitCalloutFontSize(
+  rect: Rect,
+  text: string,
+  measurerFor: FontMeasurer,
+): number {
+  const ceiling = calloutFontSizeFor(rect)
+  if (!text.trim()) return ceiling
+
+  const maxWidth = calloutTextWidth(rect.width)
+  const maxHeight = rect.height - CALLOUT_PADDING * 2
+  const fits = (size: number): boolean => {
+    const lines = wrapText(text, maxWidth, measurerFor(size))
+    return lines.length * size * CALLOUT_LINE_HEIGHT_RATIO <= maxHeight
+  }
+
+  let low = CALLOUT_MIN_FONT_SIZE
+  let high = ceiling
+  while (low < high) {
+    const middle = Math.ceil((low + high) / 2)
+    if (fits(middle)) low = middle
+    else high = middle - 1
+  }
+  return low
+}
+
+/**
+ * Re-sizes a callout's text to its bubble, growing the bubble only when even
+ * the smallest readable text will not fit. The tail is left where it is: it may
+ * have been aimed by hand.
+ */
+export function refitCallout(
+  callout: CalloutAnnotation,
+  measurerFor: FontMeasurer,
+): CalloutAnnotation {
+  const fontSize = fitCalloutFontSize(callout.rect, callout.text, measurerFor)
+  const rect = fitCalloutRect(callout.rect, callout.text, fontSize, measurerFor(fontSize))
+  if (fontSize === callout.fontSize && rectsEqual(rect, callout.rect)) return callout
+  return { ...callout, fontSize, rect }
+}
+
+/** Rewrites a callout's note, then re-sizes the text to the bubble. */
 export function updateCalloutText(
   callout: CalloutAnnotation,
   text: string,
-  measure: (text: string) => number,
+  measurerFor: FontMeasurer,
 ): CalloutAnnotation {
-  const rect = fitCalloutRect(callout.rect, text, callout.fontSize, measure)
-  if (rectsEqual(rect, callout.rect)) return { ...callout, text }
-  return { ...callout, text, rect, tail: defaultTailPoint(rect) }
+  return refitCallout({ ...callout, text }, measurerFor)
 }
 
 /** Rewrites one callout's note inside a document, leaving the rest untouched. */
@@ -99,10 +151,10 @@ export function withCalloutText(
   doc: CaptureDocument,
   id: string,
   text: string,
-  measure: (text: string) => number,
+  measurerFor: FontMeasurer,
 ): CaptureDocument {
   return updateAnnotation(doc, id, (annotation) =>
-    annotation.kind === 'callout' ? updateCalloutText(annotation, text, measure) : annotation,
+    annotation.kind === 'callout' ? updateCalloutText(annotation, text, measurerFor) : annotation,
   )
 }
 
@@ -119,6 +171,12 @@ export function calloutBadgeRect(rect: Rect, scale: number): Rect {
     width: size,
     height: size,
   }
+}
+
+/** Grab area for the round handle that aims the tail, centred on its tip. */
+export function calloutTailHandleRect(tail: Point, scale: number): Rect {
+  const size = CALLOUT_TAIL_HANDLE_SIZE / (scale > 0 ? scale : 1)
+  return { x: tail.x - size / 2, y: tail.y - size / 2, width: size, height: size }
 }
 
 /**

@@ -138,9 +138,9 @@ function calloutById(doc: CaptureDocument, id: string): CalloutAnnotation | null
 
 /** The document as it would be with `text` on the callout being edited. */
 function documentWithNote(origin: CaptureDocument, id: string, text: string): CaptureDocument {
-  const callout = calloutById(origin, id)
-  if (!callout) return origin
-  return withCalloutText(origin, id, text, textMeasurer(callout.fontSize))
+  if (!calloutById(origin, id)) return origin
+  // The measurer is passed per font size: the note is re-sized to its bubble.
+  return withCalloutText(origin, id, text, textMeasurer)
 }
 
 function startCalloutEdit(callout: CalloutAnnotation): void {
@@ -276,8 +276,9 @@ function cancelCrop(): void {
   applyTool(lastNonCropTool)
 }
 
+/** True for the Crop tool's frame only: a trim applies itself on mouse release. */
 function isCropping(): boolean {
-  return state.tool === 'crop' && !!state.cropSession
+  return state.cropSession?.mode === 'reframe'
 }
 
 const filmstrip = createFilmstrip(
