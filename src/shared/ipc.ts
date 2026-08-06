@@ -11,7 +11,7 @@ export const CHANNELS = {
   overlayCancel: 'chop:overlay-cancel',
   /** main → editor: a new capture is ready to edit */
   captureReady: 'chop:capture-ready',
-  /** editor → main: persist the flattened image and document */
+  /** editor → main: persist the flattened image and document; resolves when written */
   saveCapture: 'chop:save-capture',
   /** editor → main: copy the flattened image to the clipboard */
   copyCapture: 'chop:copy-capture',

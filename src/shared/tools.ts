@@ -22,7 +22,7 @@ export type Draft = {
   readonly current: Point
 }
 
-const DEFAULT_COLOR = '#ff3b30'
+const DEFAULT_COLOR = '#e5484d'
 
 export function defaultStyle(): ToolStyle {
   return {

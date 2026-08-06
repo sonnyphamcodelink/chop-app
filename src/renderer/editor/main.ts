@@ -37,7 +37,7 @@ import { createToolbar } from './toolbar'
 
 type EditorBridge = {
   onCapture(handler: (capture: CaptureResult) => void): void
-  save(payload: { id: string; flattenedDataUrl: string; document: unknown }): void
+  save(payload: { id: string; flattenedDataUrl: string; document: unknown }): Promise<void>
   copy(dataUrl: string): void
   saveAs(dataUrl: string): Promise<string | null>
   listCaptures(): Promise<unknown>
@@ -74,6 +74,7 @@ const store = {
 function draw(): void {
   toolbar.setActive(state.tool)
   toolbar.setColor(state.style.color)
+  toolbar.setStrokeWidth(state.style.strokeWidth)
   if (loaded) view.render(state)
 }
 
@@ -240,10 +241,10 @@ function copyToClipboard(): void {
   if (dataUrl) bridge.copy(dataUrl)
 }
 
-function save(): void {
+async function save(): Promise<void> {
   const dataUrl = flattenToDataUrl()
   if (!dataUrl) return
-  bridge.save({
+  await bridge.save({
     id: currentDocument(state).id,
     flattenedDataUrl: dataUrl,
     document: currentDocument(state),
@@ -256,7 +257,7 @@ window.addEventListener('beforeunload', () => autosave.flush())
 /** Writes now, dropping any debounced save so the same state is not written twice. */
 function saveNow(): void {
   autosave.cancel()
-  save()
+  void save()
 }
 
 /** Folds any working crop frame into the document so exports include it. */
@@ -349,9 +350,9 @@ bridge.onCapture((capture) => {
     showCanvas()
     discardCalloutEditor()
     store.set(createEditorState(createDocument(capture.id, capture.width, capture.height, capture.scaleFactor)))
-    save()
     filmstrip.setActive(capture.id)
-    void filmstrip.refresh()
+    // Wait for disk — refreshing earlier races the save and drops this capture from history.
+    void save().then(() => filmstrip.refresh())
   })
   image.src = capture.dataUrl
 })

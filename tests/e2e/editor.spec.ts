@@ -65,6 +65,10 @@ test('an incoming capture opens the editor and is auto-saved', async () => {
       timeout: 10_000,
     })
     .toBeGreaterThan(0)
+
+  // The history bar must include the capture that is currently open.
+  await expect(page.locator('#filmstrip .thumb.active')).toBeVisible({ timeout: 10_000 })
+  await expect(page.locator('#filmstrip .thumb.active img')).toHaveAttribute('src', /data:image/)
 })
 
 test('drawing a box is undoable and lands in the saved document', async () => {
