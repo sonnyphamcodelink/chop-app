@@ -4,6 +4,7 @@ import { thumbnailSize } from '@shared/flatten'
 import { CHANNELS, type SaveRequest } from '@shared/ipc'
 import { captureBaseName, findRecord } from '@shared/manifest'
 import {
+  deleteCapture,
   loadCapture,
   readManifest,
   rebuildManifest,
@@ -23,38 +24,37 @@ function nameFor(id: string): string {
 }
 
 export function registerEditorHandlers(rootDir: string): void {
-  ipcMain.on(CHANNELS.saveCapture, (_event, request: SaveRequest) => {
-    void (async (): Promise<void> => {
-      try {
-        const image = nativeImage.createFromDataURL(request.flattenedDataUrl)
-        if (image.isEmpty()) throw new Error('flattened image was empty')
+  // invoke (not send) so the editor can refresh the filmstrip only after disk is ready.
+  ipcMain.handle(CHANNELS.saveCapture, async (_event, request: SaveRequest) => {
+    try {
+      const image = nativeImage.createFromDataURL(request.flattenedDataUrl)
+      if (image.isEmpty()) throw new Error('flattened image was empty')
 
-        const size = image.getSize()
-        const thumb = thumbnailSize(size.width, size.height)
-        const name = nameFor(request.id)
+      const size = image.getSize()
+      const thumb = thumbnailSize(size.width, size.height)
+      const name = nameFor(request.id)
 
-        await saveCapture(rootDir, {
-          id: request.id,
-          name,
-          createdAt: new Date().toISOString(),
-          width: size.width,
-          height: size.height,
-          flatPng: image.toPNG(),
-          originalPng: image.toPNG(),
-          thumbPng: image.resize(thumb).toPNG(),
-          documentJson: JSON.stringify(request.document),
-        })
-      } catch (error) {
-        console.error('Failed to save capture.', error)
-        await dialog.showMessageBox({
-          type: 'error',
-          title: 'Could not save capture',
-          message:
-            'Chop could not write the capture to disk. Use Save As to choose another location.',
-          detail: error instanceof Error ? error.message : String(error),
-        })
-      }
-    })()
+      await saveCapture(rootDir, {
+        id: request.id,
+        name,
+        createdAt: new Date().toISOString(),
+        width: size.width,
+        height: size.height,
+        flatPng: image.toPNG(),
+        originalPng: image.toPNG(),
+        thumbPng: image.resize(thumb).toPNG(),
+        documentJson: JSON.stringify(request.document),
+      })
+    } catch (error) {
+      console.error('Failed to save capture.', error)
+      await dialog.showMessageBox({
+        type: 'error',
+        title: 'Could not save capture',
+        message:
+          'Chop could not write the capture to disk. Use Save As to choose another location.',
+        detail: error instanceof Error ? error.message : String(error),
+      })
+    }
   })
 
   ipcMain.on(CHANNELS.copyCapture, (_event, dataUrl: string) => {
@@ -108,6 +108,18 @@ export function registerEditorHandlers(rootDir: string): void {
       scaleFactor: 1,
       createdAt: record.createdAt,
       documentJson,
+    }
+  })
+
+  ipcMain.handle(CHANNELS.deleteCapture, async (_event, id: string) => {
+    try {
+      const deleted = await deleteCapture(rootDir, id)
+      // Free the reserved base name so a later capture never resaves over it.
+      if (deleted) namesById.delete(id)
+      return deleted
+    } catch (error) {
+      console.error('Failed to delete capture.', error)
+      return false
     }
   })
 }

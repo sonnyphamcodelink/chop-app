@@ -17,6 +17,10 @@ export type EditorState = {
   readonly draft: Draft | null
   /** Working crop frame while Crop is active; null otherwise. */
   readonly cropSession: { readonly rect: Rect } | null
+  /** Callout under the pointer, which shows its delete badge. */
+  readonly hoveredCalloutId: string | null
+  /** Callout whose note is being typed, whose text the overlay draws instead. */
+  readonly editingCalloutId: string | null
 }
 
 export function createEditorState(doc: CaptureDocument): EditorState {
@@ -26,7 +30,18 @@ export function createEditorState(doc: CaptureDocument): EditorState {
     style: defaultStyle(),
     draft: null,
     cropSession: null,
+    hoveredCalloutId: null,
+    editingCalloutId: null,
   }
+}
+
+export function setHoveredCallout(state: EditorState, id: string | null): EditorState {
+  if (state.hoveredCalloutId === id) return state
+  return { ...state, hoveredCalloutId: id }
+}
+
+export function setEditingCallout(state: EditorState, id: string | null): EditorState {
+  return { ...state, editingCalloutId: id }
 }
 
 export function currentDocument(state: EditorState): CaptureDocument {
@@ -81,6 +96,31 @@ export function commitDocument(state: EditorState, doc: CaptureDocument): Editor
 
 export function previewDocument(state: EditorState, doc: CaptureDocument): EditorState {
   return { ...state, history: { ...state.history, present: doc } }
+}
+
+/**
+ * Turns a run of previews into one history entry. A drag or a burst of typing
+ * previews every frame; `original` is what the document looked like before it
+ * started, so undo steps over the whole gesture rather than each frame of it.
+ */
+export function commitPreview(
+  state: EditorState,
+  original: CaptureDocument,
+): EditorState {
+  const previewed = currentDocument(state)
+  if (previewed === original) return state
+  return commitDocument(
+    { ...state, history: { ...state.history, present: original } },
+    previewed,
+  )
+}
+
+/** Drops a run of previews, restoring the document from before they started. */
+export function cancelPreview(
+  state: EditorState,
+  original: CaptureDocument,
+): EditorState {
+  return previewDocument(state, original)
 }
 
 export function undoState(state: EditorState): EditorState {

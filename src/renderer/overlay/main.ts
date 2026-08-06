@@ -16,14 +16,32 @@ const label = document.querySelector<HTMLDivElement>('#label')!
 const veil = document.querySelector<HTMLDivElement>('#veil')!
 const hint = document.querySelector<HTMLDivElement>('#hint')!
 const inputLayer = document.querySelector<HTMLDivElement>('#input-layer')!
+const crossX = document.querySelector<HTMLDivElement>('#cross-x')!
+const crossY = document.querySelector<HTMLDivElement>('#cross-y')!
 
 let state: OverlayInit | null = null
 let dragOrigin: Point | null = null
 let currentRect: Rect | null = null
 
-function showRect(rect: Rect, caption: string): void {
+/** Matches --guide in the stylesheet; the guides straddle the pointer. */
+const GUIDE_THICKNESS = 2
+
+function moveCrosshair(point: Point): void {
+  crossX.style.display = 'block'
+  crossY.style.display = 'block'
+  crossX.style.top = `${point.y - GUIDE_THICKNESS / 2}px`
+  crossY.style.left = `${point.x - GUIDE_THICKNESS / 2}px`
+}
+
+function hideCrosshair(): void {
+  crossX.style.display = 'none'
+  crossY.style.display = 'none'
+}
+
+function showRect(rect: Rect, caption: string, kind: 'window' | 'region'): void {
   currentRect = rect
   veil.style.display = 'none'
+  cutout.classList.toggle('window', kind === 'window')
   cutout.style.display = 'block'
   cutout.style.left = `${rect.x}px`
   cutout.style.top = `${rect.y}px`
@@ -52,7 +70,11 @@ function highlightWindowAt(point: Point): void {
     clearRect()
     return
   }
-  showRect(hit.bounds, `${hit.app} · ${Math.round(hit.bounds.width)}×${Math.round(hit.bounds.height)}`)
+  showRect(
+    hit.bounds,
+    `${hit.app} · ${Math.round(hit.bounds.width)}×${Math.round(hit.bounds.height)}`,
+    'window'
+  )
 }
 
 function commit(rect: Rect, source: 'region' | 'window'): void {
@@ -72,13 +94,24 @@ function pointerPoint(event: PointerEvent): Point {
 inputLayer.addEventListener('pointermove', (event) => {
   event.preventDefault()
   const point = pointerPoint(event)
+  moveCrosshair(point)
   if (!dragOrigin) {
     highlightWindowAt(point)
     return
   }
   hint.style.display = 'none'
   const rect = normalizeRect(dragOrigin, point)
-  showRect(rect, `${Math.round(rect.width)} × ${Math.round(rect.height)}`)
+  showRect(rect, `${Math.round(rect.width)} × ${Math.round(rect.height)}`, 'region')
+})
+
+inputLayer.addEventListener('pointerenter', (event) => {
+  moveCrosshair(pointerPoint(event))
+})
+
+inputLayer.addEventListener('pointerleave', () => {
+  if (dragOrigin) return
+  hideCrosshair()
+  clearRect()
 })
 
 inputLayer.addEventListener('pointerdown', (event) => {
@@ -86,6 +119,7 @@ inputLayer.addEventListener('pointerdown', (event) => {
   event.preventDefault()
   inputLayer.setPointerCapture(event.pointerId)
   dragOrigin = pointerPoint(event)
+  moveCrosshair(dragOrigin)
 })
 
 inputLayer.addEventListener('pointerup', (event) => {
@@ -109,6 +143,7 @@ inputLayer.addEventListener('pointerup', (event) => {
 
 inputLayer.addEventListener('pointercancel', () => {
   dragOrigin = null
+  hideCrosshair()
   clearRect()
 })
 
@@ -119,4 +154,7 @@ document.addEventListener('keydown', (event) => {
 })
 
 // A display that never receives focus still needs Escape to work.
-window.addEventListener('blur', () => clearRect())
+window.addEventListener('blur', () => {
+  hideCrosshair()
+  clearRect()
+})

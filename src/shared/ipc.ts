@@ -11,7 +11,7 @@ export const CHANNELS = {
   overlayCancel: 'chop:overlay-cancel',
   /** main → editor: a new capture is ready to edit */
   captureReady: 'chop:capture-ready',
-  /** editor → main: persist the flattened image and document */
+  /** editor → main: persist the flattened image and document; resolves when written */
   saveCapture: 'chop:save-capture',
   /** editor → main: copy the flattened image to the clipboard */
   copyCapture: 'chop:copy-capture',
@@ -21,6 +21,8 @@ export const CHANNELS = {
   listCaptures: 'chop:list-captures',
   /** editor → main: load a past capture back into the editor */
   openCapture: 'chop:open-capture',
+  /** editor → main: delete a past capture and its sidecar files */
+  deleteCapture: 'chop:delete-capture',
   /** main → editor: trigger a new capture from the tray or a shortcut */
   requestCapture: 'chop:request-capture',
 } as const

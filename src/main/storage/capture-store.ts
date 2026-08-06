@@ -1,7 +1,14 @@
 import { randomUUID } from 'node:crypto'
-import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises'
+import { mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
-import { addRecord, type CaptureRecord, emptyManifest, type Manifest } from '@shared/manifest'
+import {
+  addRecord,
+  type CaptureRecord,
+  emptyManifest,
+  findRecord,
+  type Manifest,
+  removeRecord,
+} from '@shared/manifest'
 import { readManifest, writeManifest } from './manifest-store'
 import { capturePaths, sidecarDirs } from './paths'
 
@@ -79,6 +86,26 @@ export async function loadCapture(
     ? await readFile(paths.doc, 'utf8')
     : null
   return { originalPng, documentJson }
+}
+
+/**
+ * Deletes every artefact for a capture and drops it from the manifest. Missing
+ * files are not an error: the record must go even if the disk is half empty.
+ * Returns false when the id is unknown.
+ */
+export async function deleteCapture(rootDir: string, id: string): Promise<boolean> {
+  const manifest = await readManifest(rootDir)
+  const record = findRecord(manifest, id)
+  if (!record) return false
+
+  const paths = capturePaths(rootDir, record.name)
+  await Promise.all(
+    [paths.flat, paths.original, paths.doc, paths.thumb].map((path) =>
+      rm(path, { force: true }),
+    ),
+  )
+  await writeManifest(rootDir, removeRecord(manifest, id))
+  return true
 }
 
 /** Recovery path when the manifest is missing or damaged. */

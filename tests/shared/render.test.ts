@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { PIXELATE_BLOCK_SIZE } from '@shared/constants'
+import { BLUR_SAMPLE_SIZE } from '@shared/constants'
 import { addAnnotation, type Annotation, createDocument, setCrop } from '@shared/document'
 import { type CanvasFactory, renderDocument } from '@shared/render'
 import { beginDraft, documentWithDraft, updateDraft } from '@shared/tools'
-import { createMockContext, opNames } from '../helpers/mock-context'
+import { createMockContext, type MockContext, opNames } from '../helpers/mock-context'
 
 const image = {} as CanvasImageSource
 
@@ -11,6 +11,22 @@ function factory(): CanvasFactory {
   return () => {
     const { ctx } = createMockContext()
     return { canvas: {} as CanvasImageSource, ctx }
+  }
+}
+
+/** A factory that keeps the offscreen surfaces it hands out, so they can be asserted on. */
+function recordingFactory(): {
+  readonly factory: CanvasFactory
+  readonly created: readonly MockContext[]
+} {
+  const created: MockContext[] = []
+  return {
+    factory: () => {
+      const mock = createMockContext()
+      created.push(mock)
+      return { canvas: {} as CanvasImageSource, ctx: mock.ctx }
+    },
+    created,
   }
 }
 
@@ -67,15 +83,58 @@ describe('renderDocument', () => {
     expect(ops).toContainEqual({ name: 'set:globalCompositeOperation', args: ['multiply'] })
   })
 
-  it('pixelates blur regions with smoothing disabled, never a gaussian', () => {
+  const blurRect = { x: 100, y: 50, width: BLUR_SAMPLE_SIZE * 4, height: BLUR_SAMPLE_SIZE * 4 }
+  const blur: Annotation = { id: 'x', kind: 'blur', rect: blurRect }
+
+  it('redacts a blur region by downsampling it to the sample grid', () => {
+    const { ctx } = createMockContext()
+    const { factory: recording, created } = recordingFactory()
+    renderDocument(ctx, image, addAnnotation(createDocument('d', 800, 600), blur), recording)
+
+    // The region is read from the source image into a 4x4 surface: the detail
+    // between those samples is gone, not merely spread around.
+    const offscreen = created[0]
+    expect(offscreen?.ops).toContainEqual({
+      name: 'drawImage',
+      args: [image, 100, 50, blurRect.width, blurRect.height, 0, 0, 4, 4],
+    })
+  })
+
+  it('softens and washes the blur region white instead of leaving a mosaic', () => {
     const { ctx, ops } = createMockContext()
-    const blur: Annotation = {
-      id: 'x', kind: 'blur',
-      rect: { x: 0, y: 0, width: PIXELATE_BLOCK_SIZE * 4, height: PIXELATE_BLOCK_SIZE * 4 },
-    }
     renderDocument(ctx, image, addAnnotation(createDocument('d', 800, 600), blur), factory())
-    expect(ops).toContainEqual({ name: 'set:imageSmoothingEnabled', args: [false] })
-    expect(opNames(ops).filter((name) => name === 'drawImage').length).toBeGreaterThan(1)
+    const names = opNames(ops)
+
+    expect(ops).toContainEqual({ name: 'set:imageSmoothingEnabled', args: [true] })
+    expect(ops.find((op) => op.name === 'set:filter')?.args[0]).toMatch(/^blur\(\d+px\)$/)
+    expect(names).toContain('clip')
+    expect(ops).toContainEqual({
+      name: 'fillRect',
+      args: [100, 50, blurRect.width, blurRect.height],
+    })
+    const wash = ops.find((op) => op.name === 'set:fillStyle')?.args[0] as string
+    expect(wash).toMatch(/rgba\(255, 255, 255/)
+  })
+
+  it('clears the gaussian before the wash so the wash keeps hard edges', () => {
+    const { ctx, ops } = createMockContext()
+    renderDocument(ctx, image, addAnnotation(createDocument('d', 800, 600), blur), factory())
+    const filters = ops.filter((op) => op.name === 'set:filter').map((op) => op.args[0])
+    expect(filters.at(-1)).toBe('none')
+    const clearedAt = ops.findIndex((op) => op.name === 'set:filter' && op.args[0] === 'none')
+    const washedAt = ops.findIndex((op) => op.name === 'fillRect')
+    expect(clearedAt).toBeLessThan(washedAt)
+  })
+
+  it('paints the softened region past the clip so no original shows at the edges', () => {
+    const { ctx, ops } = createMockContext()
+    renderDocument(ctx, image, addAnnotation(createDocument('d', 800, 600), blur), factory())
+    const upscale = ops.filter((op) => op.name === 'drawImage').at(-1)!
+    const [, , , , , dx, dy, dw, dh] = upscale.args as number[]
+    expect(dx!).toBeLessThan(blurRect.x)
+    expect(dy!).toBeLessThan(blurRect.y)
+    expect(dw!).toBeGreaterThan(blurRect.width)
+    expect(dh!).toBeGreaterThan(blurRect.height)
   })
 
   it('draws text with its colour and font size', () => {
@@ -87,6 +146,60 @@ describe('renderDocument', () => {
     renderDocument(ctx, image, addAnnotation(createDocument('d', 800, 600), text), factory())
     expect(ops).toContainEqual({ name: 'set:fillStyle', args: ['#0000ff'] })
     expect(ops.find((op) => op.name === 'fillText')?.args[0]).toBe('hello')
+  })
+
+  it('fills a callout bubble and its tail in the annotation colour', () => {
+    const { ctx, ops } = createMockContext()
+    const callout: Annotation = {
+      id: 'c', kind: 'callout',
+      rect: { x: 40, y: 40, width: 200, height: 80 },
+      tail: { x: 140, y: 200 },
+      text: 'look here', color: '#ff3b30', fontSize: 18,
+    }
+    renderDocument(ctx, image, addAnnotation(createDocument('d', 800, 600), callout), factory())
+    expect(ops).toContainEqual({ name: 'set:fillStyle', args: ['#ff3b30'] })
+    // The tail tip is drawn as part of a filled triangle.
+    expect(ops).toContainEqual({ name: 'lineTo', args: [140, 200] })
+    expect(opNames(ops).filter((name) => name === 'fill').length).toBeGreaterThanOrEqual(2)
+  })
+
+  it('draws callout text in a colour that contrasts with the bubble', () => {
+    const { ctx, ops } = createMockContext()
+    const callout: Annotation = {
+      id: 'c', kind: 'callout',
+      rect: { x: 0, y: 0, width: 400, height: 80 },
+      tail: { x: 200, y: 160 },
+      text: 'note', color: '#ffffff', fontSize: 18,
+    }
+    renderDocument(ctx, image, addAnnotation(createDocument('d', 800, 600), callout), factory())
+    expect(ops).toContainEqual({ name: 'set:fillStyle', args: ['#000000'] })
+    expect(ops.find((op) => op.name === 'fillText')?.args[0]).toBe('note')
+  })
+
+  it('wraps callout text onto multiple lines when it will not fit', () => {
+    const { ctx, ops } = createMockContext()
+    // The mock measures one unit per character, so a narrow bubble forces a wrap.
+    const callout: Annotation = {
+      id: 'c', kind: 'callout',
+      rect: { x: 0, y: 0, width: 30, height: 80 },
+      tail: { x: 15, y: 160 },
+      text: 'one two three four five', color: '#ff3b30', fontSize: 18,
+    }
+    renderDocument(ctx, image, addAnnotation(createDocument('d', 800, 600), callout), factory())
+    expect(ops.filter((op) => op.name === 'fillText').length).toBeGreaterThan(1)
+  })
+
+  it('draws no text for a callout with none, but still draws the bubble', () => {
+    const { ctx, ops } = createMockContext()
+    const callout: Annotation = {
+      id: 'c', kind: 'callout',
+      rect: { x: 0, y: 0, width: 100, height: 40 },
+      tail: { x: 50, y: 80 },
+      text: '', color: '#ff3b30', fontSize: 18,
+    }
+    renderDocument(ctx, image, addAnnotation(createDocument('d', 800, 600), callout), factory())
+    expect(opNames(ops)).toContain('fill')
+    expect(opNames(ops)).not.toContain('fillText')
   })
 
   it('renders annotations in document order', () => {

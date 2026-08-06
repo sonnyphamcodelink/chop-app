@@ -6,6 +6,7 @@ import {
   HANDLE_SIZE,
   STROKE_WIDTH_MAX,
   STROKE_WIDTH_MIN,
+  STROKE_WIDTHS,
 } from '@shared/constants'
 
 describe('constants', () => {
@@ -14,7 +15,7 @@ describe('constants', () => {
       'HISTORY_LIMIT',
       'AUTOSAVE_DEBOUNCE_MS',
       'THUMBNAIL_SIZE',
-      'PIXELATE_BLOCK_SIZE',
+      'BLUR_SAMPLE_SIZE',
       'WINDOW_PROVIDER_TIMEOUT_MS',
       'MIN_WINDOW_DIMENSION',
       'MIN_SELECTION_DIMENSION',
@@ -33,9 +34,17 @@ describe('constants', () => {
     }
   })
 
-  it('defaults the stroke width to the bold end of the slider', () => {
-    expect(DEFAULT_STROKE_WIDTH).toBeGreaterThanOrEqual(STROKE_WIDTH_MIN)
-    expect(DEFAULT_STROKE_WIDTH).toBeLessThanOrEqual(STROKE_WIDTH_MAX)
+  it('orders the offered stroke weights inside the allowed range', () => {
+    const widths = [STROKE_WIDTHS.thin, STROKE_WIDTHS.medium, STROKE_WIDTHS.thick]
+    for (const width of widths) {
+      expect(width).toBeGreaterThanOrEqual(STROKE_WIDTH_MIN)
+      expect(width).toBeLessThanOrEqual(STROKE_WIDTH_MAX)
+    }
+    expect([...widths].sort((a, b) => a - b)).toEqual(widths)
+  })
+
+  it('defaults the stroke width to the bold end of the offered weights', () => {
+    expect(DEFAULT_STROKE_WIDTH).toBe(STROKE_WIDTHS.thick)
     expect(DEFAULT_STROKE_WIDTH / STROKE_WIDTH_MAX).toBeGreaterThanOrEqual(0.75)
   })
 

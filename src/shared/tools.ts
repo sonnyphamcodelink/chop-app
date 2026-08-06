@@ -1,8 +1,14 @@
-import { DEFAULT_FONT_SIZE, DEFAULT_STROKE_WIDTH } from './constants'
-import type { Annotation, CaptureDocument } from './document'
-import { isDegenerateRect, normalizeRect, type Point } from './geometry'
+import { defaultTailPoint } from './callout'
+import {
+  CALLOUT_DEFAULT_HEIGHT_RATIO,
+  CALLOUT_DEFAULT_WIDTH_RATIO,
+  DEFAULT_FONT_SIZE,
+  DEFAULT_STROKE_WIDTH,
+} from './constants'
+import type { Annotation, CalloutAnnotation, CaptureDocument } from './document'
+import { isDegenerateRect, normalizeRect, type Point, type Rect } from './geometry'
 
-export type ToolId = 'box' | 'arrow' | 'text' | 'highlight' | 'blur' | 'crop'
+export type ToolId = 'box' | 'arrow' | 'text' | 'highlight' | 'blur' | 'callout' | 'crop'
 
 export type ToolStyle = {
   readonly color: string
@@ -16,7 +22,7 @@ export type Draft = {
   readonly current: Point
 }
 
-const DEFAULT_COLOR = '#ff3b30'
+const DEFAULT_COLOR = '#e5484d'
 
 export function defaultStyle(): ToolStyle {
   return {
@@ -36,7 +42,45 @@ export function updateDraft(draft: Draft, point: Point): Draft {
 
 /** Shape tools that build an annotation directly from a drag. */
 export function isDrawingTool(tool: ToolId): boolean {
-  return tool === 'box' || tool === 'arrow' || tool === 'highlight' || tool === 'blur'
+  return (
+    tool === 'box' ||
+    tool === 'arrow' ||
+    tool === 'highlight' ||
+    tool === 'blur' ||
+    tool === 'callout'
+  )
+}
+
+/**
+ * The bubble a callout drag asks for. A click with no real drag still gets a
+ * usable bubble rather than nothing, since the text comes afterwards either way.
+ */
+export function calloutRect(draft: Draft, style: ToolStyle): Rect {
+  const rect = normalizeRect(draft.start, draft.current)
+  if (!isDegenerateRect(rect)) return rect
+  return {
+    x: draft.start.x,
+    y: draft.start.y,
+    width: style.fontSize * CALLOUT_DEFAULT_WIDTH_RATIO,
+    height: style.fontSize * CALLOUT_DEFAULT_HEIGHT_RATIO,
+  }
+}
+
+export function createCallout(
+  rect: Rect,
+  text: string,
+  style: ToolStyle,
+  id: string,
+): CalloutAnnotation {
+  return {
+    id,
+    kind: 'callout',
+    rect,
+    tail: defaultTailPoint(rect),
+    text,
+    color: style.color,
+    fontSize: style.fontSize,
+  }
 }
 
 /**
@@ -65,6 +109,9 @@ export function draftToAnnotation(
       return { id, kind: 'highlight', rect, color: style.color }
     case 'blur':
       return { id, kind: 'blur', rect }
+    case 'callout':
+      // Empty until the text input commits: the drag only sizes the bubble.
+      return createCallout(rect, '', style, id)
     default:
       return null
   }

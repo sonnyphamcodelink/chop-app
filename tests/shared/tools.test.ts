@@ -3,6 +3,8 @@ import { createDocument } from '@shared/document'
 import { DEFAULT_FONT_SIZE, DEFAULT_STROKE_WIDTH } from '@shared/constants'
 import {
   beginDraft,
+  calloutRect,
+  createCallout,
   defaultStyle,
   documentWithDraft,
   draftToAnnotation,
@@ -85,9 +87,41 @@ describe('draftToAnnotation', () => {
   })
 })
 
+describe('callouts', () => {
+  it('builds a bubble with empty text from a drag, ready for typing', () => {
+    expect(draftToAnnotation(drag('callout'), style, 'a9')).toMatchObject({
+      id: 'a9',
+      kind: 'callout',
+      rect: { x: 10, y: 10, width: 100, height: 80 },
+      text: '',
+      color: '#ff3b30',
+      fontSize: 18,
+    })
+  })
+
+  it('points the tail below the bubble by default', () => {
+    const callout = createCallout({ x: 0, y: 0, width: 100, height: 40 }, 'hi', style, 'c1')
+    expect(callout.tail.x).toBe(50)
+    expect(callout.tail.y).toBeGreaterThan(40)
+  })
+
+  it('keeps the dragged bubble when the drag is a real one', () => {
+    expect(calloutRect(drag('callout'), style)).toEqual({
+      x: 10, y: 10, width: 100, height: 80,
+    })
+  })
+
+  it('falls back to a default-sized bubble when the drag was really a click', () => {
+    const rect = calloutRect(drag('callout', 11, 11), style)
+    expect(rect).toMatchObject({ x: 10, y: 10 })
+    expect(rect.width).toBeGreaterThan(0)
+    expect(rect.height).toBeGreaterThan(0)
+  })
+})
+
 describe('isDrawingTool', () => {
   it('treats shape tools as drawing tools', () => {
-    const drawing: readonly ToolId[] = ['box', 'arrow', 'highlight', 'blur']
+    const drawing: readonly ToolId[] = ['box', 'arrow', 'highlight', 'blur', 'callout']
     expect(drawing.every(isDrawingTool)).toBe(true)
   })
 

@@ -1,11 +1,12 @@
-import { backingScale, fitScale, viewToImage } from '@shared/canvas-mapping'
+import { calloutBadgeRect, hideCalloutText } from '@shared/callout'
+import { backingScale, fitScale, imageToView, viewToImage } from '@shared/canvas-mapping'
 import { fullImageRect } from '@shared/crop-session'
-import { outputSize } from '@shared/document'
+import { type CaptureDocument, outputSize } from '@shared/document'
 import type { EditorState } from '@shared/editor-state'
 import { currentDocument } from '@shared/editor-state'
-import type { Point } from '@shared/geometry'
+import type { Point, Rect } from '@shared/geometry'
 import { handleRects } from '@shared/hit-test'
-import { type CanvasFactory, renderDocument } from '@shared/render'
+import { annotationFont, type CanvasFactory, renderDocument } from '@shared/render'
 import { documentWithDraft } from '@shared/tools'
 
 export const browserCanvasFactory: CanvasFactory = (width, height) => {
@@ -17,16 +18,31 @@ export const browserCanvasFactory: CanvasFactory = (width, height) => {
   return { canvas, ctx }
 }
 
+/** One scratch context, reused: measuring must not allocate a canvas per call. */
+let measuringContext: CanvasRenderingContext2D | null = null
+
+/** Measures annotation text at `fontSize`, in image pixels. */
+export function textMeasurer(fontSize: number): (text: string) => number {
+  measuringContext ??= browserCanvasFactory(1, 1).ctx
+  const ctx = measuringContext
+  ctx.font = annotationFont(fontSize)
+  return (text) => ctx.measureText(text).width
+}
+
 export type CanvasView = {
   setImage(image: HTMLImageElement): void
   render(state: EditorState): void
   /** Renders the exported image: no zoom, no selection chrome. */
   renderTo(target: CanvasRenderingContext2D, state: EditorState): void
   toImagePoint(event: MouseEvent, state: EditorState): Point
+  /** Image coordinates to canvas-local CSS pixels, for positioning overlays. */
+  toCanvasPoint(point: Point, state: EditorState): Point
   scale(): number
 }
 
 const SELECTION_COLOR = '#2f9bff'
+/** Dark chip behind the callout delete cross, so it reads on any bubble colour. */
+const BADGE_COLOR = 'rgba(0, 0, 0, 0.7)'
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max)
@@ -36,6 +52,12 @@ export function createCanvasView(canvas: HTMLCanvasElement): CanvasView {
   let image: HTMLImageElement | null = null
   /** CSS pixels per image pixel (on-screen size). Hit-testing uses this. */
   let currentScale = 1
+
+  /** A live crop session draws the whole image, so it has no crop offset. */
+  function cropOrigin(state: EditorState): Rect | null {
+    if (state.tool === 'crop' && state.cropSession) return null
+    return currentDocument(state).cropRect
+  }
 
   function ctx2d(): CanvasRenderingContext2D {
     const ctx = canvas.getContext('2d')
@@ -93,6 +115,48 @@ export function createCanvasView(canvas: HTMLCanvasElement): CanvasView {
     ctx.restore()
   }
 
+  /**
+   * The delete badge on the callout under the pointer (or the one being typed
+   * into). Chrome, not content: `renderTo` never draws it, so it stays out of
+   * the exported image.
+   */
+  function drawCalloutChrome(
+    ctx: CanvasRenderingContext2D,
+    state: EditorState,
+    doc: CaptureDocument,
+    scale: number,
+  ): void {
+    const id = state.editingCalloutId ?? state.hoveredCalloutId
+    if (!id) return
+    const callout = doc.annotations.find((a) => a.id === id && a.kind === 'callout')
+    if (!callout || callout.kind !== 'callout') return
+
+    const badge = calloutBadgeRect(callout.rect, scale)
+    const radius = badge.width / 2
+    const centre = { x: badge.x + radius, y: badge.y + radius }
+
+    ctx.save()
+    // Chrome is drawn in image coordinates, so it needs the crop shift too.
+    if (doc.cropRect) ctx.translate(-doc.cropRect.x, -doc.cropRect.y)
+    ctx.fillStyle = BADGE_COLOR
+    ctx.beginPath()
+    ctx.arc(centre.x, centre.y, radius, 0, Math.PI * 2)
+    ctx.fill()
+
+    // A cross, drawn rather than typed, so it does not depend on a font.
+    const arm = radius * 0.42
+    ctx.strokeStyle = '#ffffff'
+    ctx.lineWidth = Math.max(1 / scale, radius * 0.18)
+    ctx.lineCap = 'round'
+    ctx.beginPath()
+    ctx.moveTo(centre.x - arm, centre.y - arm)
+    ctx.lineTo(centre.x + arm, centre.y + arm)
+    ctx.moveTo(centre.x + arm, centre.y - arm)
+    ctx.lineTo(centre.x - arm, centre.y + arm)
+    ctx.stroke()
+    ctx.restore()
+  }
+
   return {
     setImage(next: HTMLImageElement): void {
       image = next
@@ -101,7 +165,9 @@ export function createCanvasView(canvas: HTMLCanvasElement): CanvasView {
     render(state: EditorState): void {
       if (!image) return
       const inCropSession = state.tool === 'crop' && !!state.cropSession
-      const baseDoc = currentDocument(state)
+      const baseDoc = state.editingCalloutId
+        ? hideCalloutText(currentDocument(state), state.editingCalloutId)
+        : currentDocument(state)
       const doc = inCropSession
         ? { ...baseDoc, cropRect: null }
         : documentWithDraft(baseDoc, state.draft, state.style)
@@ -129,6 +195,7 @@ export function createCanvasView(canvas: HTMLCanvasElement): CanvasView {
       ctx.scale(bufferScale, bufferScale)
       renderDocument(ctx, image, doc, browserCanvasFactory)
       drawCropSession(ctx, state, currentScale)
+      if (!inCropSession) drawCalloutChrome(ctx, state, doc, currentScale)
       ctx.restore()
     },
 
@@ -141,11 +208,11 @@ export function createCanvasView(canvas: HTMLCanvasElement): CanvasView {
     toImagePoint(event: MouseEvent, state: EditorState): Point {
       const rect = canvas.getBoundingClientRect()
       const local = { x: event.clientX - rect.left, y: event.clientY - rect.top }
-      const cropOrigin =
-        state.tool === 'crop' && state.cropSession
-          ? null
-          : currentDocument(state).cropRect
-      return viewToImage(local, currentScale, cropOrigin)
+      return viewToImage(local, currentScale, cropOrigin(state))
+    },
+
+    toCanvasPoint(point: Point, state: EditorState): Point {
+      return imageToView(point, currentScale, cropOrigin(state))
     },
 
     scale(): number {

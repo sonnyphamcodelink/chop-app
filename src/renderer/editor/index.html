@@ -12,18 +12,94 @@
         user-select: none;
       }
       body { display: flex; flex-direction: column; }
+      /* Floating glass pill. Its colours are fixed rather than system-derived,
+         so the panel keeps the designed contrast in both light and dark mode. */
       #toolbar {
-        display: flex;
-        gap: 6px;
-        align-items: center;
-        padding: 8px 12px;
-        border-bottom: 1px solid rgba(128, 128, 128, 0.3);
+        --tb-accent: oklch(0.55 0.19 258);
+        --tb-hover: oklch(0.9 0.01 250);
         flex: 0 0 auto;
+        align-self: center;
+        display: flex;
+        align-items: center;
+        gap: 2px;
+        margin: 12px;
+        padding: 8px;
+        border-radius: 12px;
+        background: oklch(1 0 0 / 0.72);
+        backdrop-filter: blur(16px) saturate(1.4);
+        -webkit-backdrop-filter: blur(16px) saturate(1.4);
+        box-shadow:
+          0 1px 2px oklch(0.2 0 0 / 0.06),
+          0 8px 24px oklch(0.2 0 0 / 0.12),
+          0 0 0 1px oklch(1 0 0 / 0.5) inset;
       }
-      #toolbar button { padding: 5px 10px; border-radius: 6px; cursor: pointer; }
-      #toolbar .tool.active { background: #2f9bff; color: #fff; }
-      .swatches { display: flex; gap: 4px; margin-left: 8px; }
-      .swatch { width: 18px; height: 18px; border-radius: 50%; border: 1px solid #8888; padding: 0; }
+      /* Backgrounds are deliberately left to the per-button rules below: an
+         id-scoped background here would outrank their .active and :hover states. */
+      #toolbar button {
+        padding: 0;
+        border: none;
+        cursor: pointer;
+      }
+      /* Clicks must land on the button, never on the glyph inside it. */
+      #toolbar svg { pointer-events: none; }
+      .tb-group { display: flex; align-items: center; gap: 2px; }
+      .tb-tools { padding-right: 6px; }
+      .tb-colors { gap: 8px; padding: 0 8px; }
+      .tb-weights { gap: 4px; padding: 0 4px 0 6px; }
+      .tb-actions { padding-left: 6px; }
+      .tb-divider {
+        width: 1px;
+        align-self: stretch;
+        margin: 4px;
+        background: oklch(0.85 0.005 250);
+        flex-shrink: 0;
+      }
+      .tb-tool, .tb-action {
+        width: 36px;
+        height: 36px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 8px;
+        background: transparent;
+        color: oklch(0.32 0.01 250);
+        transition: background 0.15s ease, color 0.15s ease;
+      }
+      .tb-tool:hover, .tb-action:hover { background: var(--tb-hover); }
+      .tb-tool.active, .tb-tool.active:hover {
+        background: var(--tb-accent);
+        color: #fff;
+      }
+      .tb-swatch {
+        width: 22px;
+        height: 22px;
+        border-radius: 50%;
+        box-shadow: 0 0 0 1px oklch(0 0 0 / 0.06);
+        transition: box-shadow 0.15s ease, transform 0.15s ease;
+      }
+      /* White needs an edge of its own or it vanishes into the panel. */
+      .tb-swatch.tb-outlined { box-shadow: 0 0 0 1px oklch(0.85 0.01 250); }
+      .tb-swatch:hover { transform: scale(1.12); }
+      /* A gap in white, then a ring in the accent, so the marker reads on every
+         swatch — including blue and white. */
+      .tb-swatch.active, .tb-swatch.tb-outlined.active {
+        box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--tb-accent);
+        transform: scale(1.05);
+      }
+      .tb-weight {
+        width: 32px;
+        height: 32px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 8px;
+        background: transparent;
+        transition: background 0.15s ease;
+      }
+      .tb-weight:hover { background: var(--tb-hover); }
+      .tb-weight.active, .tb-weight.active:hover { background: oklch(0.9 0.03 258); }
+      .tb-dot { border-radius: 50%; background: oklch(0.45 0.01 250); }
+      .tb-weight.active .tb-dot { background: var(--tb-accent); }
       #stage {
         flex: 1 1 auto;
         display: grid;
@@ -43,6 +119,21 @@
         padding: 2px 4px;
         outline: none;
       }
+      /* Sits on the callout itself: no chrome, so the note looks typed onto it. */
+      #callout-input {
+        position: absolute;
+        display: none;
+        margin: 0;
+        padding: 0;
+        border: none;
+        outline: none;
+        background: transparent;
+        resize: none;
+        overflow: hidden;
+        text-align: center;
+        white-space: pre-wrap;
+        overflow-wrap: break-word;
+      }
       #filmstrip {
         flex: 0 0 auto;
         display: flex;
@@ -56,8 +147,15 @@
         height: 90px;
         box-sizing: border-box;
       }
+      .thumb {
+        position: relative;
+        flex: 0 0 auto;
+        /* Room for the delete button to sit proud of the top-right corner. */
+        padding: 6px 6px 0 0;
+      }
       #filmstrip img {
         /* Uniform tiles: every capture gets the same box, cropped to fill. */
+        display: block;
         width: 112px;
         height: 72px;
         object-fit: cover;
@@ -67,9 +165,27 @@
         cursor: pointer;
         border: 2px solid transparent;
         box-sizing: border-box;
-        flex: 0 0 auto;
       }
-      #filmstrip img.active { border-color: #2f9bff; }
+      /* Needs the id to outrank `#filmstrip img`'s transparent border. */
+      #filmstrip .thumb.active img { border-color: #2f9bff; }
+      .thumb .remove {
+        position: absolute;
+        top: 0;
+        right: 0;
+        width: 26px;
+        height: 26px;
+        padding: 0;
+        border: 1.5px solid rgba(255, 255, 255, 0.9);
+        border-radius: 50%;
+        background: rgba(0, 0, 0, 0.65);
+        color: #fff;
+        font: 18px/1 -apple-system, system-ui, sans-serif;
+        cursor: pointer;
+        opacity: 0.75;
+      }
+      .thumb:hover .remove,
+      .thumb .remove:focus-visible { opacity: 1; }
+      .thumb .remove:hover { background: #e5484d; }
       #empty { margin: auto; opacity: 0.6; }
     </style>
   </head>
@@ -78,6 +194,7 @@
     <div id="stage">
       <canvas id="canvas"></canvas>
       <input id="text-input" />
+      <textarea id="callout-input" rows="1" spellcheck="false"></textarea>
       <div id="empty">Press ⌘⇧2 to capture</div>
     </div>
     <div id="filmstrip"></div>

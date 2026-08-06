@@ -4,11 +4,22 @@
     <meta charset="utf-8" />
     <title>Chop capture</title>
     <style>
+      :root {
+        --accent: #ffd400;
+        /* Guide dashes: 12px of line, 9px of gap, 2px thick. */
+        --dash: 12px;
+        --gap: 21px;
+        --guide: 2px;
+        /* A reticle in the guide colour: four heavy arms with a small gap at
+           the centre, so the pixel under the hotspot is never hidden. The black
+           outer stroke is what keeps yellow readable on pale content. */
+        --cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32'%3E%3Cg fill='none' stroke-linecap='butt'%3E%3Cpath d='M16 1V13M16 19V31M1 16H13M19 16H31' stroke='%23000' stroke-opacity='.75' stroke-width='5.5'/%3E%3Cpath d='M16 1V13M16 19V31M1 16H13M19 16H31' stroke='%23ffd400' stroke-width='3'/%3E%3C/g%3E%3C/svg%3E") 16 16, crosshair;
+      }
       html, body {
         margin: 0;
         height: 100%;
         overflow: hidden;
-        cursor: crosshair;
+        cursor: var(--cursor);
         user-select: none;
         background: transparent;
       }
@@ -29,8 +40,41 @@
         position: fixed;
         display: none;
         box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.35);
-        outline: 2px solid #2f9bff;
+        outline: 2px solid var(--accent);
         pointer-events: none;
+      }
+      /* A window under the cursor is only a candidate, so its border stays dashed. */
+      #cutout.window {
+        outline-width: 3px;
+        outline-style: dashed;
+      }
+      /* Dashed guides that track the pointer, Snagit style. A gradient rather
+         than a dashed border, so dash and gap lengths are ours to set. */
+      .crosshair {
+        position: fixed;
+        display: none;
+        pointer-events: none;
+        filter: drop-shadow(0 0 1.5px rgba(0, 0, 0, 0.9));
+      }
+      #cross-x {
+        left: 0;
+        width: 100vw;
+        height: var(--guide);
+        background: repeating-linear-gradient(
+          to right,
+          var(--accent) 0 var(--dash),
+          transparent var(--dash) var(--gap)
+        );
+      }
+      #cross-y {
+        top: 0;
+        width: var(--guide);
+        height: 100vh;
+        background: repeating-linear-gradient(
+          to bottom,
+          var(--accent) 0 var(--dash),
+          transparent var(--dash) var(--gap)
+        );
       }
       #label {
         position: fixed;
@@ -57,7 +101,7 @@
       #input-layer {
         position: fixed;
         inset: 0;
-        cursor: crosshair;
+        cursor: var(--cursor);
       }
     </style>
   </head>
@@ -66,6 +110,8 @@
     <div id="veil"></div>
     <div id="cutout"></div>
     <div id="label"></div>
+    <div id="cross-x" class="crosshair"></div>
+    <div id="cross-y" class="crosshair"></div>
     <div id="hint">Click a window · Drag a region · Esc to cancel</div>
     <div id="input-layer"></div>
     <script type="module" src="./main.ts"></script>

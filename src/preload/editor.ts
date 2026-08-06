@@ -7,8 +7,8 @@ contextBridge.exposeInMainWorld('chopEditor', {
       handler(capture),
     )
   },
-  save(payload: SaveRequest): void {
-    ipcRenderer.send(CHANNELS.saveCapture, payload)
+  save(payload: SaveRequest): Promise<void> {
+    return ipcRenderer.invoke(CHANNELS.saveCapture, payload) as Promise<void>
   },
   copy(dataUrl: string): void {
     ipcRenderer.send(CHANNELS.copyCapture, dataUrl)
@@ -21,5 +21,8 @@ contextBridge.exposeInMainWorld('chopEditor', {
   },
   openCapture(id: string): Promise<unknown> {
     return ipcRenderer.invoke(CHANNELS.openCapture, id)
+  },
+  deleteCapture(id: string): Promise<boolean> {
+    return ipcRenderer.invoke(CHANNELS.deleteCapture, id) as Promise<boolean>
   },
 })

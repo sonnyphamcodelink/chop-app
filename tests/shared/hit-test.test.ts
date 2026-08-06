@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { HANDLE_SIZE } from '@shared/constants'
+import { CALLOUT_BADGE_SIZE, HANDLE_SIZE } from '@shared/constants'
 import { addAnnotation, type Annotation, createDocument } from '@shared/document'
 import { rectContains } from '@shared/geometry'
 import {
   annotationAtPoint,
   annotationBounds,
+  calloutHitAtPoint,
   handleAtPoint,
   handleRects,
   moveAnnotation,
@@ -44,6 +45,16 @@ describe('annotationBounds', () => {
     expect(bounds.height).toBeGreaterThanOrEqual(20)
   })
 
+  it("includes the tail in a callout's bounds", () => {
+    const callout: Annotation = {
+      id: 'c', kind: 'callout',
+      rect: { x: 100, y: 100, width: 200, height: 80 },
+      tail: { x: 200, y: 260 },
+      text: 'note', color: '#f00', fontSize: 18,
+    }
+    expect(annotationBounds(callout)).toEqual({ x: 100, y: 100, width: 200, height: 160 })
+  })
+
   it('returns the rect for highlight and blur', () => {
     const blur: Annotation = { id: 'b', kind: 'blur', rect: { x: 1, y: 2, width: 3, height: 4 } }
     expect(annotationBounds(blur)).toEqual({ x: 1, y: 2, width: 3, height: 4 })
@@ -65,6 +76,51 @@ describe('annotationAtPoint', () => {
 
   it('returns null for an empty document', () => {
     expect(annotationAtPoint(createDocument('d', 10, 10), { x: 1, y: 1 })).toBeNull()
+  })
+})
+
+describe('calloutHitAtPoint', () => {
+  const callout: Annotation = {
+    id: 'callout', kind: 'callout',
+    rect: { x: 100, y: 100, width: 200, height: 80 },
+    tail: { x: 200, y: 260 },
+    text: 'note', color: '#f00', fontSize: 18,
+  }
+  const doc = addAnnotation(addAnnotation(createDocument('d', 800, 600), box), callout)
+
+  it('reports the bubble body under the point', () => {
+    expect(calloutHitAtPoint(doc, { x: 150, y: 120 })).toMatchObject({
+      callout: { id: 'callout' },
+      part: 'body',
+    })
+  })
+
+  it('reports the delete badge at the top-right corner', () => {
+    // The badge straddles the corner, so its centre is the corner itself.
+    expect(calloutHitAtPoint(doc, { x: 300, y: 100 })).toMatchObject({
+      callout: { id: 'callout' },
+      part: 'badge',
+    })
+  })
+
+  it('keeps the badge the same size on screen however far the image is zoomed', () => {
+    // At half scale a badge covers twice as many image pixels.
+    const justOutside = { x: 300 + CALLOUT_BADGE_SIZE / 2 + 1, y: 100 }
+    expect(calloutHitAtPoint(doc, justOutside, 1)).toBeNull()
+    expect(calloutHitAtPoint(doc, justOutside, 0.5)?.part).toBe('badge')
+  })
+
+  it('returns the front-most callout when two bubbles overlap', () => {
+    const stacked = addAnnotation(doc, { ...callout, id: 'onTop' })
+    expect(calloutHitAtPoint(stacked, { x: 150, y: 120 })?.callout.id).toBe('onTop')
+  })
+
+  it('ignores the empty area beside the tail', () => {
+    expect(calloutHitAtPoint(doc, { x: 120, y: 240 })).toBeNull()
+  })
+
+  it('ignores annotations of other kinds', () => {
+    expect(calloutHitAtPoint(doc, { x: 50, y: 30 })).toBeNull()
   })
 })
 
@@ -167,6 +223,19 @@ describe('moveAnnotation', () => {
   it('offsets both arrow endpoints', () => {
     expect(moveAnnotation(arrow, 10, 10)).toMatchObject({
       from: { x: 210, y: 210 }, to: { x: 110, y: 160 },
+    })
+  })
+
+  it('moves a callout bubble and its tail together', () => {
+    const callout: Annotation = {
+      id: 'c', kind: 'callout',
+      rect: { x: 100, y: 100, width: 200, height: 80 },
+      tail: { x: 200, y: 260 },
+      text: 'note', color: '#f00', fontSize: 18,
+    }
+    expect(moveAnnotation(callout, 10, -20)).toMatchObject({
+      rect: { x: 110, y: 80, width: 200, height: 80 },
+      tail: { x: 210, y: 240 },
     })
   })
 

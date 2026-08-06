@@ -39,12 +39,26 @@ export type BlurAnnotation = {
   readonly rect: Rect
 }
 
+/** A filled speech bubble with a tail pointing at what it describes. */
+export type CalloutAnnotation = {
+  readonly id: string
+  readonly kind: 'callout'
+  /** The bubble body, in image coordinates. */
+  readonly rect: Rect
+  /** Where the tail tip lands, in image coordinates. */
+  readonly tail: Point
+  readonly text: string
+  readonly color: string
+  readonly fontSize: number
+}
+
 export type Annotation =
   | BoxAnnotation
   | ArrowAnnotation
   | TextAnnotation
   | HighlightAnnotation
   | BlurAnnotation
+  | CalloutAnnotation
 
 export type CaptureDocument = {
   readonly id: string
@@ -106,7 +120,9 @@ export function serializeDocument(doc: CaptureDocument): string {
   return JSON.stringify(doc)
 }
 
-const KINDS: readonly Annotation['kind'][] = ['box', 'arrow', 'text', 'highlight', 'blur']
+const KINDS: readonly Annotation['kind'][] = [
+  'box', 'arrow', 'text', 'highlight', 'blur', 'callout',
+]
 
 function isRect(value: unknown): value is Rect {
   if (typeof value !== 'object' || value === null) return false
