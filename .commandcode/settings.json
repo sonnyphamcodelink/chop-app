@@ -22,7 +22,10 @@
       "Shell(npx electron-vite build 2 >& 1)",
       "Shell(npx playwright test tests/e2e/editor.spec.ts -g selected box is deleted 2 >& 1)",
       "Shell(npx playwright test tests/e2e/editor.spec.ts 2 >& 1)",
-      "Shell(git add src/ tests/ && git commit -F - <<'EOF' feat: add Delete-key support for box and editable annotations Click a box, arrow, or text annotation to select it — handles persist after the pointer leaves. Press Delete or Backspace to remove the selected annotation, undoable via Cmd+Z. Selection clears on tool switch, undo/redo, and empty-canvas click. The click-to-select and click-vs-drag distinction uses a drag threshold so a click never accidentally moves the annotation before deleting it. Co-authored-by: CommandCodeBot <noreply@commandcode.ai> EOF)"
+      "Shell(git add src/ tests/ && git commit -F - <<'EOF' feat: add Delete-key support for box and editable annotations Click a box, arrow, or text annotation to select it — handles persist after the pointer leaves. Press Delete or Backspace to remove the selected annotation, undoable via Cmd+Z. Selection clears on tool switch, undo/redo, and empty-canvas click. The click-to-select and click-vs-drag distinction uses a drag threshold so a click never accidentally moves the annotation before deleting it. Co-authored-by: CommandCodeBot <noreply@commandcode.ai> EOF)",
+      "Shell(git commit -F - <<'EOF' chore: add commandcode project config and taste preferences Co-authored-by: CommandCodeBot <noreply@commandcode.ai> EOF)",
+      "Shell(git commit --amend -F - <<'EOF' chore: add commandcode project config and taste preferences Co-authored-by: CommandCodeBot <noreply@commandcode.ai> EOF)",
+      "Shell(git add .commandcode/settings.json && git commit -F - <<'EOF' chore: update commandcode permission allowances Co-authored-by: CommandCodeBot <noreply@commandcode.ai> EOF)"
     ],
     "deny": [],
     "defaultMode": "default"
