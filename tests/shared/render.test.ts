@@ -174,6 +174,22 @@ describe('renderDocument', () => {
     expect(opNames(ops).filter((name) => name === 'fill').length).toBeGreaterThanOrEqual(2)
   })
 
+  it('starts the tail on the bubble\u2019s bottom edge, so the two shapes meet flush', () => {
+    const { ctx, ops } = createMockContext()
+    const callout: Annotation = {
+      id: 'c', kind: 'callout',
+      rect: { x: 40, y: 40, width: 200, height: 80 },
+      tail: { x: 300, y: 260 },
+      text: '', color: '#ff3b30', fontSize: 18,
+    }
+    renderDocument(ctx, image, addAnnotation(createDocument('d', 800, 600), callout), factory())
+    // moveTo starts the triangle; the bubble path that follows starts elsewhere.
+    const [baseX, baseY] = ops.find((op) => op.name === 'moveTo')!.args as [number, number]
+    expect(baseY).toBe(120)
+    expect(baseX).toBeGreaterThanOrEqual(40)
+    expect(baseX).toBeLessThan(140)
+  })
+
   it('draws callout text in a colour that contrasts with the bubble', () => {
     const { ctx, ops } = createMockContext()
     const callout: Annotation = {

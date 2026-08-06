@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { createDocument, setCrop } from '@shared/document'
 import {
   constrainCropRect,
+  cropBounds,
   fullImageRect,
   initialCropRect,
   moveCropRect,
@@ -20,6 +21,23 @@ describe('fullImageRect / initialCropRect', () => {
     const cropped = setCrop(doc, { x: 10, y: 20, width: 100, height: 80 })
     expect(initialCropRect(cropped)).toEqual({ x: 10, y: 20, width: 100, height: 80 })
     expect(fullImageRect(cropped)).toEqual(bounds)
+  })
+})
+
+describe('cropBounds', () => {
+  const cropped = setCrop(doc, { x: 10, y: 20, width: 100, height: 80 })
+
+  it('gives reframing the whole capture, so a crop can be pushed back out', () => {
+    expect(cropBounds(cropped, 'reframe')).toEqual(bounds)
+  })
+
+  it('holds trimming to the cropped view it is drawn over', () => {
+    expect(cropBounds(cropped, 'trim')).toEqual({ x: 10, y: 20, width: 100, height: 80 })
+  })
+
+  it('is the whole capture either way when nothing is cropped yet', () => {
+    expect(cropBounds(doc, 'reframe')).toEqual(bounds)
+    expect(cropBounds(doc, 'trim')).toEqual(bounds)
   })
 })
 

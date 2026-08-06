@@ -6,6 +6,7 @@ import {
   addAnnotation,
   type CalloutAnnotation,
   type CaptureDocument,
+  outputSize,
   updateAnnotation,
 } from '@shared/document'
 import {
@@ -33,14 +34,7 @@ import {
   resizeAnnotation,
   resizeRect,
 } from '@shared/hit-test'
-import {
-  beginDraft,
-  calloutRect,
-  createCallout,
-  draftToAnnotation,
-  isDrawingTool,
-  updateDraft,
-} from '@shared/tools'
+import { beginDraft, draftToAnnotation, isDrawingTool, updateDraft } from '@shared/tools'
 import { type CanvasView, textMeasurer } from './canvas-view'
 
 export type Store = {
@@ -82,11 +76,6 @@ type Gesture =
       readonly origin: CaptureDocument
     }
   | {
-      readonly mode: 'callout-tail'
-      readonly callout: CalloutAnnotation
-      readonly origin: CaptureDocument
-    }
-  | {
       readonly mode: 'annotation-move'
       readonly annotation: EditableAnnotation
       readonly origin: CaptureDocument
@@ -103,14 +92,13 @@ function newId(): string {
   return crypto.randomUUID()
 }
 
-/** The pointer a callout's parts ask for: aim the tail, resize, delete, move. */
+/** The pointer a callout's parts ask for: delete, resize, move. */
 function calloutCursor(hit: CalloutHit): CursorHit {
   switch (hit.part) {
     case 'badge':
       return { kind: 'pointer' }
     case 'handle':
       return { kind: 'resize', cursor: cursorForHandle(hit.handle) }
-    case 'tail':
     case 'body':
       return { kind: 'move' }
   }
@@ -171,16 +159,13 @@ export function attachInteractions(
           return
         }
         canvas.style.cursor = canvasCursor({ kind: 'move' })
-        gesture =
-          calloutHit.part === 'tail'
-            ? { mode: 'callout-tail', callout: calloutHit.callout, origin }
-            : {
-                mode: 'callout-move',
-                callout: calloutHit.callout,
-                origin,
-                last: point,
-                moved: false,
-              }
+        gesture = {
+          mode: 'callout-move',
+          callout: calloutHit.callout,
+          origin,
+          last: point,
+          moved: false,
+        }
         return
       }
 
@@ -294,18 +279,6 @@ export function attachInteractions(
                   textMeasurer,
                 )
               : annotation,
-          ),
-        ),
-      )
-      return
-    }
-
-    if (gesture.mode === 'callout-tail') {
-      store.set(
-        previewDocument(
-          state,
-          updateAnnotation(currentDocument(state), gesture.callout.id, (annotation) =>
-            annotation.kind === 'callout' ? { ...annotation, tail: point } : annotation,
           ),
         ),
       )
@@ -429,8 +402,7 @@ export function attachInteractions(
     if (
       finished.mode === 'annotation-move' ||
       finished.mode === 'annotation-resize' ||
-      finished.mode === 'callout-resize' ||
-      finished.mode === 'callout-tail'
+      finished.mode === 'callout-resize'
     ) {
       store.set(commitPreview(state, finished.origin))
       return
@@ -446,22 +418,13 @@ export function attachInteractions(
     if (finished.mode !== 'draw') return
 
     if (state.draft) {
-      // A callout lands empty; its note is typed by clicking the bubble after.
-      if (state.draft.tool === 'callout') {
-        const rect = calloutRect(state.draft, state.style)
-        store.set(
-          commitDocument(
-            state,
-            addAnnotation(currentDocument(state), createCallout(rect, state.style, newId())),
-          ),
-        )
-        return
-      }
-
-      const annotation = draftToAnnotation(state.draft, state.style, newId())
+      // A drag too small to be a shape leaves nothing behind, callouts included:
+      // a stray click on the capture should not litter it with empty bubbles.
+      const doc = currentDocument(state)
+      const annotation = draftToAnnotation(state.draft, state.style, newId(), outputSize(doc))
       store.set(
         annotation
-          ? commitDocument(state, addAnnotation(currentDocument(state), annotation))
+          ? commitDocument(state, addAnnotation(doc, annotation))
           : setDraft(state, null),
       )
       return

@@ -1,4 +1,4 @@
-import { calloutBadgeRect, calloutTailHandleRect } from './callout'
+import { calloutBadgeRect, tailTip } from './callout'
 import { HANDLE_HIT_SIZE, HANDLE_SIZE } from './constants'
 import type {
   Annotation,
@@ -43,18 +43,20 @@ export function annotationBounds(annotation: Annotation): Rect {
       return annotation.rect
     case 'arrow':
       return normalizeRect(annotation.from, annotation.to)
-    case 'callout':
+    case 'callout': {
       // The tail is part of the shape, so it belongs inside the bounds.
+      const tip = tailTip(annotation.rect, annotation.tail)
       return normalizeRect(
         {
-          x: Math.min(annotation.rect.x, annotation.tail.x),
-          y: Math.min(annotation.rect.y, annotation.tail.y),
+          x: Math.min(annotation.rect.x, tip.x),
+          y: Math.min(annotation.rect.y, tip.y),
         },
         {
-          x: Math.max(annotation.rect.x + annotation.rect.width, annotation.tail.x),
-          y: Math.max(annotation.rect.y + annotation.rect.height, annotation.tail.y),
+          x: Math.max(annotation.rect.x + annotation.rect.width, tip.x),
+          y: Math.max(annotation.rect.y + annotation.rect.height, tip.y),
         },
       )
+    }
     case 'text':
       return {
         x: annotation.at.x,
@@ -81,11 +83,11 @@ export function annotationAtPoint(
 }
 
 /**
- * Which part of a callout the pointer is over: the delete badge, the round
- * handle that aims the tail, one of the eight resize handles, or the bubble.
+ * Which part of a callout the pointer is over: the delete badge, one of the
+ * eight resize handles, or the bubble.
  */
 export type CalloutHit =
-  | { readonly callout: CalloutAnnotation; readonly part: 'badge' | 'tail' | 'body' }
+  | { readonly callout: CalloutAnnotation; readonly part: 'badge' | 'body' }
   | {
       readonly callout: CalloutAnnotation
       readonly part: 'handle'
@@ -94,8 +96,8 @@ export type CalloutHit =
 
 /**
  * Front-most callout under the point, or null. Controls are tested before the
- * bubble, and the tail's own grab area before the bubble's handles. `scale` is
- * CSS pixels per image pixel, which keeps every grab area constant on screen.
+ * bubble. `scale` is CSS pixels per image pixel, which keeps every grab area
+ * constant on screen.
  */
 export function calloutHitAtPoint(
   doc: CaptureDocument,
@@ -109,9 +111,6 @@ export function calloutHitAtPoint(
     // The badge straddles the corner, so it is tested before the bubble.
     if (rectContains(calloutBadgeRect(annotation.rect, scale), point)) {
       return { callout: annotation, part: 'badge' }
-    }
-    if (rectContains(calloutTailHandleRect(annotation.tail, scale), point)) {
-      return { callout: annotation, part: 'tail' }
     }
     const handle = handleAtPoint(annotation.rect, point, scale)
     if (handle) return { callout: annotation, part: 'handle', handle }
@@ -312,11 +311,9 @@ export function moveAnnotation(
         to: { x: annotation.to.x + dx, y: annotation.to.y + dy },
       }
     case 'callout':
-      return {
-        ...annotation,
-        rect: offsetRect(annotation.rect, dx, dy),
-        tail: { x: annotation.tail.x + dx, y: annotation.tail.y + dy },
-      }
+      // Only the bubble travels. The tip marks what the note points at, so the
+      // tail stretches or shortens to keep reaching it.
+      return { ...annotation, rect: offsetRect(annotation.rect, dx, dy) }
     case 'text':
       return { ...annotation, at: { x: annotation.at.x + dx, y: annotation.at.y + dy } }
   }

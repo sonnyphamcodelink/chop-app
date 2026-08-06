@@ -1,4 +1,4 @@
-import { calloutBadgeRect, calloutTailHandleRect, hideCalloutText } from '@shared/callout'
+import { calloutBadgeRect, hideCalloutText } from '@shared/callout'
 import { backingScale, fitScale, imageToView, viewToImage } from '@shared/canvas-mapping'
 import { cropBounds } from '@shared/crop-session'
 import { type CaptureDocument, outputSize } from '@shared/document'
@@ -188,7 +188,8 @@ export function createCanvasView(canvas: HTMLCanvasElement): CanvasView {
     if (doc.cropRect) ctx.translate(-doc.cropRect.x, -doc.cropRect.y)
 
     if (annotation.kind === 'callout') {
-      // Same handles as the crop frame, plus one on the tail tip for aiming it.
+      // The same handles as the crop frame. The tail has none: it follows the
+      // bubble rather than being aimed.
       for (const handle of handleRects(annotation.rect)) {
         drawResizeHandle(
           ctx,
@@ -199,7 +200,6 @@ export function createCanvasView(canvas: HTMLCanvasElement): CanvasView {
           scale,
         )
       }
-      drawResizeHandle(ctx, annotation.tail, scale)
 
       const badge = calloutBadgeRect(annotation.rect, scale)
       const radius = badge.width / 2

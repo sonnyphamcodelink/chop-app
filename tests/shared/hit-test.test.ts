@@ -292,7 +292,7 @@ describe('moveAnnotation', () => {
     })
   })
 
-  it('moves a callout bubble and its tail together', () => {
+  it('moves a callout bubble but leaves its tail tip on what it points at', () => {
     const callout: Annotation = {
       id: 'c', kind: 'callout',
       rect: { x: 100, y: 100, width: 200, height: 80 },
@@ -301,7 +301,7 @@ describe('moveAnnotation', () => {
     }
     expect(moveAnnotation(callout, 10, -20)).toMatchObject({
       rect: { x: 110, y: 80, width: 200, height: 80 },
-      tail: { x: 210, y: 240 },
+      tail: { x: 200, y: 260 },
     })
   })
 
