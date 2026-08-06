@@ -1,0 +1,14 @@
+# Taste
+
+- Wants screen-capture selection UX modeled on Snagit: yellow dashed border highlighting windows and dashed crosshair guides that follow the pointer while selecting a region. Confidence: 0.9
+- Prefers direct in-place editing on the canvas (type straight into a callout/annotation by clicking it) over a separate input bar shown after creation. Confidence: 0.9
+- Prefers annotation tools to work in every mode (click to select, edit, move, or resize an existing annotation from any tool state) rather than mode-restricted editing. Confidence: 0.8
+- Prefers removing unneeded features entirely instead of leaving them as dead or unused buttons. Confidence: 0.8
+- Wants exact, quantitative visual control — dash/gap lengths in px, sizes in px, specific colors — and sends corrections until pixel-perfect. Confidence: 0.9
+- Prefers small, minimal resize handles (small white circles with black borders) over large colored squares. Confidence: 0.8
+- Prefers a crosshair-style capture pointer: 4 strokes with a small empty center, black outline for contrast on light backgrounds, yellow/orange core, ~40px total. Confidence: 0.7
+- Captured output must preserve original image and text quality — no zooming, no upscaling, no blur. Confidence: 0.8
+- Actions should apply automatically on mouse release with no extra confirmation; stray or accidental clicks should do nothing (not create objects). Confidence: 0.8
+- Annotation objects should have sensible default proportions/sizes on first creation so users don't have to manually resize them. Confidence: 0.7
+- Prefers fixed positioning over movable decorative parts when motion adds no value (e.g., callout arrow anchored bottom-left and auto-stretching instead of being draggable). Confidence: 0.7
+- Expects standard keyboard deletion for annotations: pressing Delete while an object is selected should delete it. Confidence: 0.6
