@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   type DisplayInfo,
+  dipRectToImage,
   dipToPhysical,
   displayForPoint,
   globalToLocal,
@@ -75,27 +76,55 @@ describe('physicalSize', () => {
     expect(physicalSize(primary)).toEqual({ width: 3024, height: 1964 })
   })
 
-  it('rounds outward at fractional scale factors, matching dipToPhysical', () => {
+  it('rounds to nearest at fractional scale factors, matching the framebuffer', () => {
     const fractional: DisplayInfo = {
       id: 3,
       bounds: { x: 0, y: 0, width: 1509, height: 849 },
       scaleFactor: 1.25,
     }
-    // 1509 * 1.25 = 1886.25 -> 1887, never 1886, or a full-width selection
-    // would compute a crop one pixel wider than the buffer.
-    expect(physicalSize(fractional)).toEqual({ width: 1887, height: 1062 })
+    // 1509 * 1.25 = 1886.25 -> 1886. Requesting 1887 would make the capturer
+    // rescale the whole frame to fit, resampling every glyph on screen.
+    expect(physicalSize(fractional)).toEqual({ width: 1886, height: 1061 })
+  })
+})
+
+describe('dipRectToImage', () => {
+  const bounds = { width: 1512, height: 982 }
+
+  it('scales a selection by the image-to-DIP ratio', () => {
+    const image = { width: 3024, height: 1964 }
+    expect(dipRectToImage({ x: 100, y: 50, width: 200, height: 100 }, bounds, image)).toEqual({
+      x: 200, y: 100, width: 400, height: 200,
+    })
   })
 
-  it('never reports a size smaller than a full-display selection needs', () => {
-    const fractional: DisplayInfo = {
-      id: 4,
-      bounds: { x: 0, y: 0, width: 1707, height: 960 },
-      scaleFactor: 1.75,
-    }
-    const full = selectionToPhysical(fractional.bounds, fractional)
-    const size = physicalSize(fractional)
-    expect(full.x + full.width).toBeLessThanOrEqual(size.width)
-    expect(full.y + full.height).toBeLessThanOrEqual(size.height)
+  it('is an identity when the image matches the DIP bounds', () => {
+    const rect = { x: 10, y: 20, width: 30, height: 40 }
+    expect(dipRectToImage(rect, bounds, bounds)).toEqual(rect)
+  })
+
+  it('rounds outward so no selected pixel is lost', () => {
+    const image = { width: 1890, height: 1228 }
+    const mapped = dipRectToImage({ x: 10, y: 20, width: 30, height: 40 }, bounds, image)
+    expect(mapped.x).toBeLessThanOrEqual((10 * image.width) / bounds.width)
+    expect(mapped.x + mapped.width).toBeGreaterThanOrEqual((40 * image.width) / bounds.width)
+  })
+
+  it('keeps a full-display selection inside a frame that is a pixel short', () => {
+    // The capturer is authoritative: a 1886-wide frame must never yield a crop
+    // running to 1887, whatever scaleFactor claims.
+    const image = { width: 1886, height: 1061 }
+    const full = { x: 0, y: 0, width: bounds.width, height: bounds.height }
+    const mapped = dipRectToImage(full, bounds, image)
+    expect(mapped.x + mapped.width).toBeLessThanOrEqual(image.width)
+    expect(mapped.y + mapped.height).toBeLessThanOrEqual(image.height)
+  })
+
+  it('degenerates to an empty rect rather than NaN on a zero-sized display', () => {
+    const rect = { x: 5, y: 5, width: 10, height: 10 }
+    const mapped = dipRectToImage(rect, { width: 0, height: 0 }, { width: 0, height: 0 })
+    expect(Number.isFinite(mapped.x)).toBe(true)
+    expect(Number.isFinite(mapped.width)).toBe(true)
   })
 })
 

@@ -47,6 +47,17 @@ describe('renderDocument', () => {
     expect(ops.find((op) => op.name === 'translate')?.args).toEqual([-100, -50])
   })
 
+  it('snaps a fractional crop origin to whole pixels', () => {
+    // A half-pixel offset lands the screenshot between pixels, and the
+    // interpolation that follows softens every glyph in the export.
+    const { ctx, ops } = createMockContext()
+    const doc = setCrop(createDocument('d', 800, 600), {
+      x: 137.4, y: 50.6, width: 300, height: 200,
+    })
+    renderDocument(ctx, image, doc, factory())
+    expect(ops.find((op) => op.name === 'translate')?.args).toEqual([-137, -51])
+  })
+
   it('strokes a box with its colour and width', () => {
     const { ctx, ops } = createMockContext()
     const box: Annotation = {

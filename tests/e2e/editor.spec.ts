@@ -104,6 +104,73 @@ test('drawing a box is undoable and lands in the saved document', async () => {
   await expect(page.getByRole('button', { name: 'Box' })).toHaveClass(/active/)
 })
 
+test('a placed box can be moved and resized in any tool mode', async () => {
+  await sendCapture({
+    id: 'e2e-box-edit',
+    dataUrl: ONE_PIXEL_PNG,
+    width: 400,
+    height: 300,
+    createdAt: new Date().toISOString(),
+  })
+
+  const page = await app.firstWindow()
+  await expect(page.locator('#empty')).toBeHidden()
+  await page.getByRole('button', { name: 'Box' }).click()
+
+  const canvas = page.locator('#canvas')
+  const box = await canvas.boundingBox()
+  if (!box) throw new Error('canvas has no bounding box')
+
+  // Draw a box from (20,20) to (120,90) in canvas space.
+  await page.mouse.move(box.x + 20, box.y + 20)
+  await page.mouse.down()
+  await page.mouse.move(box.x + 120, box.y + 90)
+  await page.mouse.up()
+
+  await expect
+    .poll(async () => (await savedBox())?.rect.width, { timeout: 10_000 })
+    .toBeGreaterThan(0)
+  const drawn = await savedBox()
+
+  // Switch away from Box — editing must still work, like callouts.
+  await page.getByRole('button', { name: 'Arrow' }).click()
+
+  // Drag the body to the right.
+  await page.mouse.move(box.x + 70, box.y + 55)
+  await page.mouse.down()
+  await page.mouse.move(box.x + 120, box.y + 55, { steps: 8 })
+  await page.mouse.up()
+
+  await expect
+    .poll(async () => (await savedBox())?.rect.x, { timeout: 10_000 })
+    .toBeCloseTo(drawn.rect.x + 50, 0)
+
+  const moved = await savedBox()
+
+  // Drag the south-east corner outward.
+  const seX = box.x + moved.rect.x + moved.rect.width
+  const seY = box.y + moved.rect.y + moved.rect.height
+  await page.mouse.move(seX, seY)
+  await page.mouse.down()
+  await page.mouse.move(seX + 40, seY + 30, { steps: 8 })
+  await page.mouse.up()
+
+  await expect
+    .poll(async () => (await savedBox())?.rect.width, { timeout: 10_000 })
+    .toBeGreaterThan(moved.rect.width)
+})
+
+/** The single box in the most recently written document sidecar. */
+async function savedBox(): Promise<{
+  rect: { x: number; y: number; width: number; height: number }
+}> {
+  const annotations = (await savedAnnotations()) as
+    | readonly { kind: string }[]
+    | undefined
+  const found = annotations?.find((a) => a.kind === 'box')
+  return found as never
+}
+
 test('a callout can be dragged around the capture and deleted from its badge', async () => {
   await sendCapture({
     id: 'e2e-callout-move',

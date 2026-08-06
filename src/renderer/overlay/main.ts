@@ -1,3 +1,4 @@
+import { REGION_RETICLE_CURSOR } from '@shared/cursor'
 import { isDegenerateRect, normalizeRect, type Point, type Rect } from '@shared/geometry'
 import type { OverlayInit, OverlaySelection } from '@shared/ipc'
 import { windowAtPoint, type WindowRect } from '@shared/window-rect'
@@ -18,6 +19,8 @@ const hint = document.querySelector<HTMLDivElement>('#hint')!
 const inputLayer = document.querySelector<HTMLDivElement>('#input-layer')!
 const crossX = document.querySelector<HTMLDivElement>('#cross-x')!
 const crossY = document.querySelector<HTMLDivElement>('#cross-y')!
+
+document.documentElement.style.setProperty('--cursor', REGION_RETICLE_CURSOR)
 
 let state: OverlayInit | null = null
 let dragOrigin: Point | null = null

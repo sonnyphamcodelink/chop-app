@@ -25,6 +25,7 @@ export function createMockContext(): MockContext {
     closePath: record('closePath'),
     moveTo: record('moveTo'),
     lineTo: record('lineTo'),
+    arc: record('arc'),
     quadraticCurveTo: record('quadraticCurveTo'),
     // Rough stand-in for text metrics: one unit of width per character.
     measureText: (text: string): TextMetrics => {

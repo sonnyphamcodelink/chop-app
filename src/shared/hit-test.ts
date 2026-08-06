@@ -1,6 +1,13 @@
 import { calloutBadgeRect } from './callout'
 import { HANDLE_HIT_SIZE, HANDLE_SIZE } from './constants'
-import type { Annotation, CalloutAnnotation, CaptureDocument } from './document'
+import type {
+  Annotation,
+  ArrowAnnotation,
+  BoxAnnotation,
+  CalloutAnnotation,
+  CaptureDocument,
+  TextAnnotation,
+} from './document'
 import {
   normalizeRect,
   offsetRect,
@@ -11,9 +18,22 @@ import {
 
 export type HandleId = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w'
 
+/** Box uses all eight; arrow uses endpoints; text uses corners of its bounds. */
+export type AnnotationHandleId = HandleId | 'from' | 'to'
+
+export type EditableAnnotation = BoxAnnotation | ArrowAnnotation | TextAnnotation
+
+export function isEditableAnnotation(
+  annotation: Annotation,
+): annotation is EditableAnnotation {
+  return annotation.kind === 'box' || annotation.kind === 'arrow' || annotation.kind === 'text'
+}
+
 /** Rough per-character width as a fraction of font size, for text bounds. */
 const TEXT_WIDTH_RATIO = 0.6
 const TEXT_HEIGHT_RATIO = 1.25
+/** Floor so a dragged text annotation never collapses to nothing. */
+const MIN_FONT_SIZE = 8
 
 export function annotationBounds(annotation: Annotation): Rect {
   switch (annotation.kind) {
@@ -91,10 +111,39 @@ export function calloutHitAtPoint(
   return null
 }
 
+export type EditableHit = {
+  readonly annotation: EditableAnnotation
+  /** Null means the body was hit, not a resize handle. */
+  readonly handle: AnnotationHandleId | null
+}
+
+/**
+ * Front-most box, arrow, or text under the point. Handles win over the body so
+ * a corner grab always resizes rather than moves.
+ */
+export function editableHitAtPoint(
+  doc: CaptureDocument,
+  point: Point,
+  scale = 1,
+): EditableHit | null {
+  for (let index = doc.annotations.length - 1; index >= 0; index -= 1) {
+    const annotation = doc.annotations[index]!
+    if (!isEditableAnnotation(annotation)) continue
+    const handle = annotationHandleAtPoint(annotation, point, scale)
+    if (handle) return { annotation, handle }
+    if (rectContains(annotationBounds(annotation), point)) {
+      return { annotation, handle: null }
+    }
+  }
+  return null
+}
+
 const DRAW_ORDER: readonly HandleId[] = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w']
 
 /** Corners first, so they win wherever a corner and an edge grab area overlap. */
 const HIT_ORDER: readonly HandleId[] = ['nw', 'ne', 'se', 'sw', 'n', 'e', 's', 'w']
+
+const TEXT_CORNERS: readonly HandleId[] = ['nw', 'ne', 'se', 'sw']
 
 /** No more than a third of an edge may be grab area, or a small frame is all handle. */
 const MAX_HIT_FRACTION = 1 / 3
@@ -127,6 +176,23 @@ export function handleRects(
   return DRAW_ORDER.map((id) => ({ id, rect: squareAt(anchors[id], HANDLE_SIZE) }))
 }
 
+/** Drawn handle squares for the hovered editable annotation. */
+export function annotationHandleRects(
+  annotation: EditableAnnotation,
+): readonly { readonly id: AnnotationHandleId; readonly rect: Rect }[] {
+  if (annotation.kind === 'arrow') {
+    return [
+      { id: 'from', rect: squareAt(annotation.from, HANDLE_SIZE) },
+      { id: 'to', rect: squareAt(annotation.to, HANDLE_SIZE) },
+    ]
+  }
+  if (annotation.kind === 'text') {
+    const anchors = handleAnchors(annotationBounds(annotation))
+    return TEXT_CORNERS.map((id) => ({ id, rect: squareAt(anchors[id], HANDLE_SIZE) }))
+  }
+  return handleRects(annotation.rect)
+}
+
 /** Grab area in image pixels: constant on screen however far the image is zoomed. */
 function hitSize(rect: Rect, scale: number): number {
   const onScreen = HANDLE_HIT_SIZE / (scale > 0 ? scale : 1)
@@ -144,6 +210,28 @@ export function handleAtPoint(rect: Rect, point: Point, scale = 1): HandleId | n
   const anchors = handleAnchors(rect)
   const size = hitSize(rect, scale)
   return HIT_ORDER.find((id) => rectContains(squareAt(anchors[id], size), point)) ?? null
+}
+
+export function annotationHandleAtPoint(
+  annotation: EditableAnnotation,
+  point: Point,
+  scale = 1,
+): AnnotationHandleId | null {
+  if (annotation.kind === 'arrow') {
+    const size = HANDLE_HIT_SIZE / (scale > 0 ? scale : 1)
+    if (rectContains(squareAt(annotation.from, size), point)) return 'from'
+    if (rectContains(squareAt(annotation.to, size), point)) return 'to'
+    return null
+  }
+  if (annotation.kind === 'text') {
+    const bounds = annotationBounds(annotation)
+    const anchors = handleAnchors(bounds)
+    const size = hitSize(bounds, scale)
+    return (
+      TEXT_CORNERS.find((id) => rectContains(squareAt(anchors[id], size), point)) ?? null
+    )
+  }
+  return handleAtPoint(annotation.rect, point, scale)
 }
 
 /** Drags one corner to the pointer, keeping the opposite corner anchored. */
@@ -171,6 +259,29 @@ export function resizeRect(rect: Rect, handle: HandleId, point: Point): Rect {
     case 'w':
       return normalizeRect({ x: point.x, y: top }, { x: right, y: bottom })
   }
+}
+
+export function resizeAnnotation(
+  annotation: EditableAnnotation,
+  handle: AnnotationHandleId,
+  point: Point,
+): EditableAnnotation {
+  if (annotation.kind === 'arrow') {
+    if (handle === 'from') return { ...annotation, from: point }
+    if (handle === 'to') return { ...annotation, to: point }
+    return annotation
+  }
+  if (annotation.kind === 'text') {
+    if (handle === 'from' || handle === 'to') return annotation
+    const resized = resizeRect(annotationBounds(annotation), handle, point)
+    return {
+      ...annotation,
+      at: { x: resized.x, y: resized.y },
+      fontSize: Math.max(MIN_FONT_SIZE, resized.height / TEXT_HEIGHT_RATIO),
+    }
+  }
+  if (handle === 'from' || handle === 'to') return annotation
+  return { ...annotation, rect: resizeRect(annotation.rect, handle, point) }
 }
 
 export function moveAnnotation(

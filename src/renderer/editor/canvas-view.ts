@@ -5,7 +5,11 @@ import { type CaptureDocument, outputSize } from '@shared/document'
 import type { EditorState } from '@shared/editor-state'
 import { currentDocument } from '@shared/editor-state'
 import type { Point, Rect } from '@shared/geometry'
-import { handleRects } from '@shared/hit-test'
+import {
+  annotationHandleRects,
+  handleRects,
+  isEditableAnnotation,
+} from '@shared/hit-test'
 import { annotationFont, type CanvasFactory, renderDocument } from '@shared/render'
 import { documentWithDraft } from '@shared/tools'
 
@@ -43,9 +47,31 @@ export type CanvasView = {
 const SELECTION_COLOR = '#2f9bff'
 /** Dark chip behind the callout delete cross, so it reads on any bubble colour. */
 const BADGE_COLOR = 'rgba(0, 0, 0, 0.7)'
+/** Resize handles stay subtle and the same size on screen at every zoom level. */
+const RESIZE_HANDLE_RADIUS = 3.5
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max)
+}
+
+function resizeHandleRadius(scale: number): number {
+  return RESIZE_HANDLE_RADIUS / (scale > 0 ? scale : 1)
+}
+
+/** Draws editor-only resize chrome: white fill, thin black outline, 7 CSS px. */
+export function drawResizeHandle(
+  ctx: CanvasRenderingContext2D,
+  center: Point,
+  scale: number,
+): void {
+  const safeScale = scale > 0 ? scale : 1
+  ctx.fillStyle = '#ffffff'
+  ctx.strokeStyle = '#000000'
+  ctx.lineWidth = 1 / safeScale
+  ctx.beginPath()
+  ctx.arc(center.x, center.y, resizeHandleRadius(safeScale), 0, Math.PI * 2)
+  ctx.fill()
+  ctx.stroke()
 }
 
 export function createCanvasView(canvas: HTMLCanvasElement): CanvasView {
@@ -94,66 +120,76 @@ export function createCanvasView(canvas: HTMLCanvasElement): CanvasView {
     ctx.setLineDash([4 / scale, 3 / scale])
     ctx.strokeRect(rect.x, rect.y, rect.width, rect.height)
     ctx.setLineDash([])
-    ctx.fillStyle = SELECTION_COLOR
     for (const handle of handleRects(rect)) {
-      // Handles keep a constant on-screen size, and are nudged off the image
-      // edge so a frame at the boundary still shows a whole, grabbable square.
-      const w = handle.rect.width / scale
-      const h = handle.rect.height / scale
+      // Nudge boundary handles inward so the complete circle and border show.
+      const outerRadius = resizeHandleRadius(scale) + 0.5 / scale
       const cx = clamp(
         handle.rect.x + handle.rect.width / 2,
-        bounds.x + w / 2,
-        bounds.x + bounds.width - w / 2,
+        bounds.x + outerRadius,
+        bounds.x + bounds.width - outerRadius,
       )
       const cy = clamp(
         handle.rect.y + handle.rect.height / 2,
-        bounds.y + h / 2,
-        bounds.y + bounds.height - h / 2,
+        bounds.y + outerRadius,
+        bounds.y + bounds.height - outerRadius,
       )
-      ctx.fillRect(cx - w / 2, cy - h / 2, w, h)
+      drawResizeHandle(ctx, { x: cx, y: cy }, scale)
     }
     ctx.restore()
   }
 
   /**
-   * The delete badge on the callout under the pointer (or the one being typed
-   * into). Chrome, not content: `renderTo` never draws it, so it stays out of
-   * the exported image.
+   * Editor chrome for the annotation under the pointer (or the callout being
+   * typed into). Never drawn by `renderTo`, so it stays out of the export.
    */
-  function drawCalloutChrome(
+  function drawAnnotationChrome(
     ctx: CanvasRenderingContext2D,
     state: EditorState,
     doc: CaptureDocument,
     scale: number,
   ): void {
-    const id = state.editingCalloutId ?? state.hoveredCalloutId
+    const id = state.editingCalloutId ?? state.hoveredAnnotationId
     if (!id) return
-    const callout = doc.annotations.find((a) => a.id === id && a.kind === 'callout')
-    if (!callout || callout.kind !== 'callout') return
-
-    const badge = calloutBadgeRect(callout.rect, scale)
-    const radius = badge.width / 2
-    const centre = { x: badge.x + radius, y: badge.y + radius }
+    const annotation = doc.annotations.find((a) => a.id === id)
+    if (!annotation) return
 
     ctx.save()
-    // Chrome is drawn in image coordinates, so it needs the crop shift too.
     if (doc.cropRect) ctx.translate(-doc.cropRect.x, -doc.cropRect.y)
-    ctx.fillStyle = BADGE_COLOR
-    ctx.beginPath()
-    ctx.arc(centre.x, centre.y, radius, 0, Math.PI * 2)
-    ctx.fill()
 
-    // A cross, drawn rather than typed, so it does not depend on a font.
-    const arm = radius * 0.42
-    ctx.strokeStyle = '#ffffff'
-    ctx.lineWidth = Math.max(1 / scale, radius * 0.18)
-    ctx.lineCap = 'round'
-    ctx.beginPath()
-    ctx.moveTo(centre.x - arm, centre.y - arm)
-    ctx.lineTo(centre.x + arm, centre.y + arm)
-    ctx.moveTo(centre.x + arm, centre.y - arm)
-    ctx.lineTo(centre.x - arm, centre.y + arm)
-    ctx.stroke()
+    if (annotation.kind === 'callout') {
+      const badge = calloutBadgeRect(annotation.rect, scale)
+      const radius = badge.width / 2
+      const centre = { x: badge.x + radius, y: badge.y + radius }
+
+      ctx.fillStyle = BADGE_COLOR
+      ctx.beginPath()
+      ctx.arc(centre.x, centre.y, radius, 0, Math.PI * 2)
+      ctx.fill()
+
+      // A cross, drawn rather than typed, so it does not depend on a font.
+      const arm = radius * 0.42
+      ctx.strokeStyle = '#ffffff'
+      ctx.lineWidth = Math.max(1 / scale, radius * 0.18)
+      ctx.lineCap = 'round'
+      ctx.beginPath()
+      ctx.moveTo(centre.x - arm, centre.y - arm)
+      ctx.lineTo(centre.x + arm, centre.y + arm)
+      ctx.moveTo(centre.x + arm, centre.y - arm)
+      ctx.lineTo(centre.x - arm, centre.y + arm)
+      ctx.stroke()
+    } else if (isEditableAnnotation(annotation)) {
+      for (const handle of annotationHandleRects(annotation)) {
+        drawResizeHandle(
+          ctx,
+          {
+            x: handle.rect.x + handle.rect.width / 2,
+            y: handle.rect.y + handle.rect.height / 2,
+          },
+          scale,
+        )
+      }
+    }
+
     ctx.restore()
   }
 
@@ -192,10 +228,13 @@ export function createCanvasView(canvas: HTMLCanvasElement): CanvasView {
       const ctx = ctx2d()
       ctx.clearRect(0, 0, canvas.width, canvas.height)
       ctx.save()
+      // Only matters when the capture is too big for the viewport and has to be
+      // shrunk to fit: the default filter mangles text, this one keeps it legible.
+      ctx.imageSmoothingQuality = 'high'
       ctx.scale(bufferScale, bufferScale)
       renderDocument(ctx, image, doc, browserCanvasFactory)
       drawCropSession(ctx, state, currentScale)
-      if (!inCropSession) drawCalloutChrome(ctx, state, doc, currentScale)
+      if (!inCropSession) drawAnnotationChrome(ctx, state, doc, currentScale)
       ctx.restore()
     },
 

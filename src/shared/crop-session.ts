@@ -10,16 +10,24 @@ export function initialCropRect(doc: CaptureDocument): Rect {
   return doc.cropRect ?? fullImageRect(doc)
 }
 
-/** Clamp into bounds and enforce MIN_SELECTION_DIMENSION on both edges. */
+/**
+ * Clamp into bounds and enforce MIN_SELECTION_DIMENSION on both edges.
+ *
+ * The result is snapped to whole image pixels. Pointer positions divided by the
+ * view scale are fractional, and a crop origin of x=137.4 makes the export draw
+ * the screenshot half a pixel off the grid — which resamples the entire image
+ * and softens every glyph in it. Rounding here costs sub-pixel precision the
+ * user cannot aim at anyway.
+ */
 export function constrainCropRect(rect: Rect, bounds: Rect): Rect {
   const min = MIN_SELECTION_DIMENSION
-  const width = Math.min(Math.max(rect.width, min), bounds.width)
-  const height = Math.min(Math.max(rect.height, min), bounds.height)
+  const width = Math.min(Math.max(Math.round(rect.width), min), bounds.width)
+  const height = Math.min(Math.max(Math.round(rect.height), min), bounds.height)
   const maxX = bounds.x + bounds.width - width
   const maxY = bounds.y + bounds.height - height
   return {
-    x: Math.min(Math.max(rect.x, bounds.x), maxX),
-    y: Math.min(Math.max(rect.y, bounds.y), maxY),
+    x: Math.min(Math.max(Math.round(rect.x), bounds.x), maxX),
+    y: Math.min(Math.max(Math.round(rect.y), bounds.y), maxY),
     width,
     height,
   }

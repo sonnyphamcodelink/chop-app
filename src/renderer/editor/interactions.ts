@@ -1,5 +1,6 @@
 import { CALLOUT_DRAG_THRESHOLD } from '@shared/constants'
 import { constrainCropRect, fullImageRect, moveCropRect } from '@shared/crop-session'
+import { canvasCursor, RETICLE_CURSOR } from '@shared/cursor'
 import {
   addAnnotation,
   type CalloutAnnotation,
@@ -14,14 +15,18 @@ import {
   previewDocument,
   setCropSession,
   setDraft,
-  setHoveredCallout,
+  setHoveredAnnotation,
 } from '@shared/editor-state'
 import { type Point, rectContains } from '@shared/geometry'
 import {
+  type AnnotationHandleId,
   calloutHitAtPoint,
+  type EditableAnnotation,
+  editableHitAtPoint,
   type HandleId,
   handleAtPoint,
   moveAnnotation,
+  resizeAnnotation,
   resizeRect,
 } from '@shared/hit-test'
 import {
@@ -64,6 +69,18 @@ type Gesture =
       /** Until the pointer travels far enough, this is still a click. */
       readonly moved: boolean
     }
+  | {
+      readonly mode: 'annotation-move'
+      readonly annotation: EditableAnnotation
+      readonly origin: CaptureDocument
+      readonly last: Point
+    }
+  | {
+      readonly mode: 'annotation-resize'
+      readonly annotation: EditableAnnotation
+      readonly handle: AnnotationHandleId
+      readonly origin: CaptureDocument
+    }
 
 function newId(): string {
   return crypto.randomUUID()
@@ -77,8 +94,8 @@ export function attachInteractions(
 ): void {
   let gesture: Gesture | null = null
 
-  /** Callouts are inert while a crop frame is being set. */
-  function calloutsInteractive(state: EditorState): boolean {
+  /** Callouts and placed shapes are inert while a crop frame is being set. */
+  function shapesInteractive(state: EditorState): boolean {
     return !(state.tool === 'crop' && state.cropSession)
   }
 
@@ -89,24 +106,50 @@ export function attachInteractions(
     const state = store.get()
     const point = view.toImagePoint(event, state)
 
-    if (calloutsInteractive(state)) {
-      // Callouts answer to the pointer whatever tool is selected: the badge
-      // deletes, and the bubble either moves or opens for typing.
-      const hit = calloutHitAtPoint(currentDocument(state), point, view.scale())
-      if (hit?.part === 'badge') {
+    if (shapesInteractive(state)) {
+      // Callouts answer first: badge deletes, bubble moves or opens for typing.
+      const calloutHit = calloutHitAtPoint(currentDocument(state), point, view.scale())
+      if (calloutHit?.part === 'badge') {
         event.preventDefault()
-        handlers.onCalloutDelete(hit.callout)
+        handlers.onCalloutDelete(calloutHit.callout)
         return
       }
-      if (hit) {
+      if (calloutHit) {
         event.preventDefault()
+        canvas.style.cursor = canvasCursor({ kind: 'move' })
         gesture = {
           mode: 'callout-move',
-          callout: hit.callout,
+          callout: calloutHit.callout,
           origin: currentDocument(state),
           last: point,
           moved: false,
         }
+        return
+      }
+
+      // Boxes, arrows, and text: grab in any tool, same as callouts.
+      const editHit = editableHitAtPoint(currentDocument(state), point, view.scale())
+      if (editHit) {
+        event.preventDefault()
+        const origin = currentDocument(state)
+        canvas.style.cursor = canvasCursor(
+          editHit.handle
+            ? { kind: 'resize', cursor: cursorForHandle(editHit.handle) }
+            : { kind: 'move' },
+        )
+        gesture = editHit.handle
+          ? {
+              mode: 'annotation-resize',
+              annotation: editHit.annotation,
+              handle: editHit.handle,
+              origin,
+            }
+          : {
+              mode: 'annotation-move',
+              annotation: editHit.annotation,
+              origin,
+              last: point,
+            }
         return
       }
     }
@@ -121,14 +164,17 @@ export function attachInteractions(
       const { rect } = state.cropSession
       const handle = handleAtPoint(rect, point, view.scale())
       if (handle) {
+        canvas.style.cursor = canvasCursor({ kind: 'resize', cursor: cursorForHandle(handle) })
         gesture = { mode: 'crop-resize', handle }
       } else if (rectContains(rect, point)) {
+        canvas.style.cursor = canvasCursor({ kind: 'move' })
         gesture = { mode: 'crop-move', last: point }
       }
       return
     }
     if (isDrawingTool(state.tool)) {
       gesture = { mode: 'draw' }
+      canvas.style.cursor = RETICLE_CURSOR
       store.set(setDraft(state, beginDraft(state.tool, point)))
     }
   })
@@ -143,6 +189,7 @@ export function attachInteractions(
     }
 
     if (gesture.mode === 'draw') {
+      canvas.style.cursor = RETICLE_CURSOR
       if (state.draft) store.set(setDraft(state, updateDraft(state.draft, point)))
       return
     }
@@ -165,6 +212,41 @@ export function attachInteractions(
       return
     }
 
+    if (gesture.mode === 'annotation-move') {
+      const dx = point.x - gesture.last.x
+      const dy = point.y - gesture.last.y
+      store.set(
+        previewDocument(
+          state,
+          updateAnnotation(currentDocument(state), gesture.annotation.id, (annotation) =>
+            moveAnnotation(annotation, dx, dy),
+          ),
+        ),
+      )
+      gesture = { ...gesture, last: point }
+      return
+    }
+
+    if (gesture.mode === 'annotation-resize') {
+      const { annotation: target, handle } = gesture
+      store.set(
+        previewDocument(
+          state,
+          updateAnnotation(currentDocument(state), target.id, (annotation) => {
+            if (
+              annotation.kind !== 'box' &&
+              annotation.kind !== 'arrow' &&
+              annotation.kind !== 'text'
+            ) {
+              return annotation
+            }
+            return resizeAnnotation(annotation, handle, point)
+          }),
+        ),
+      )
+      return
+    }
+
     if (!state.cropSession) return
     const bounds = fullImageRect(currentDocument(state))
 
@@ -182,13 +264,50 @@ export function attachInteractions(
     }
   })
 
-  /** Shows the delete badge, and the cursor, for whatever is under the pointer. */
+  /** Shows handles / the delete badge, and the cursor, for whatever is under the pointer. */
   function updateHover(state: EditorState, point: Point): void {
-    const hit = calloutsInteractive(state)
-      ? calloutHitAtPoint(currentDocument(state), point, view.scale())
-      : null
-    canvas.style.cursor = hit ? (hit.part === 'badge' ? 'pointer' : 'move') : ''
-    store.set(setHoveredCallout(state, hit?.callout.id ?? null))
+    if (state.tool === 'crop' && state.cropSession) {
+      const { rect } = state.cropSession
+      const handle = handleAtPoint(rect, point, view.scale())
+      canvas.style.cursor = canvasCursor(
+        handle
+          ? { kind: 'resize', cursor: cursorForHandle(handle) }
+          : rectContains(rect, point)
+            ? { kind: 'move' }
+            : { kind: 'none' },
+      )
+      store.set(setHoveredAnnotation(state, null))
+      return
+    }
+
+    if (!shapesInteractive(state)) {
+      canvas.style.cursor = canvasCursor({ kind: 'none' })
+      store.set(setHoveredAnnotation(state, null))
+      return
+    }
+
+    const calloutHit = calloutHitAtPoint(currentDocument(state), point, view.scale())
+    if (calloutHit) {
+      canvas.style.cursor = canvasCursor(
+        calloutHit.part === 'badge' ? { kind: 'pointer' } : { kind: 'move' },
+      )
+      store.set(setHoveredAnnotation(state, calloutHit.callout.id))
+      return
+    }
+
+    const editHit = editableHitAtPoint(currentDocument(state), point, view.scale())
+    if (editHit) {
+      canvas.style.cursor = canvasCursor(
+        editHit.handle
+          ? { kind: 'resize', cursor: cursorForHandle(editHit.handle) }
+          : { kind: 'move' },
+      )
+      store.set(setHoveredAnnotation(state, editHit.annotation.id))
+      return
+    }
+
+    canvas.style.cursor = canvasCursor({ kind: 'none' })
+    store.set(setHoveredAnnotation(state, null))
   }
 
   canvas.addEventListener('mouseup', () => {
@@ -201,6 +320,11 @@ export function attachInteractions(
       // A bubble that never really moved was a click, so it opens for typing.
       if (finished.moved) store.set(commitPreview(state, finished.origin))
       else handlers.onCalloutEdit(finished.callout)
+      return
+    }
+
+    if (finished.mode === 'annotation-move' || finished.mode === 'annotation-resize') {
+      store.set(commitPreview(state, finished.origin))
       return
     }
 
@@ -233,18 +357,46 @@ export function attachInteractions(
   })
 
   canvas.addEventListener('mouseleave', () => {
-    store.set(setHoveredCallout(store.get(), null))
+    store.set(setHoveredAnnotation(store.get(), null))
+    canvas.style.cursor = canvasCursor({ kind: 'none' })
     if (!gesture) return
     const abandoned = gesture
     gesture = null
 
-    // Leaving mid-move keeps the bubble where it got to, as one history entry.
-    if (abandoned.mode === 'callout-move') {
-      if (abandoned.moved) store.set(commitPreview(store.get(), abandoned.origin))
+    // Leaving mid-move keeps the shape where it got to, as one history entry.
+    if (
+      abandoned.mode === 'callout-move' ||
+      abandoned.mode === 'annotation-move' ||
+      abandoned.mode === 'annotation-resize'
+    ) {
+      if (abandoned.mode === 'callout-move' && !abandoned.moved) return
+      store.set(commitPreview(store.get(), abandoned.origin))
       return
     }
     // Leaving the canvas ends the drag but keeps the frame the user dragged out.
     if (abandoned.mode !== 'draw') return
     store.set(setDraft(store.get(), null))
   })
+
+  canvas.style.cursor = RETICLE_CURSOR
+}
+
+function cursorForHandle(handle: AnnotationHandleId): string {
+  switch (handle) {
+    case 'n':
+    case 's':
+      return 'ns-resize'
+    case 'e':
+    case 'w':
+      return 'ew-resize'
+    case 'nw':
+    case 'se':
+      return 'nwse-resize'
+    case 'ne':
+    case 'sw':
+      return 'nesw-resize'
+    case 'from':
+    case 'to':
+      return 'pointer'
+  }
 }

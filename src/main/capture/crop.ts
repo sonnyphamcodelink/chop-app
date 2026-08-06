@@ -1,6 +1,6 @@
 import { nativeImage } from 'electron'
 import { randomUUID } from 'node:crypto'
-import { dipToPhysical } from '@shared/coords'
+import { dipRectToImage } from '@shared/coords'
 import { clampRect, rectArea } from '@shared/geometry'
 import type { CaptureResult, OverlaySelection } from '@shared/ipc'
 import type { DisplayCapture } from './capture-service'
@@ -28,7 +28,7 @@ export function cropCapture(
     height: capture.display.bounds.height,
   }
   const localSelection = clampRect(selection.rect, displayBounds)
-  const physical = clampRect(dipToPhysical(localSelection, capture.display.scaleFactor), imageBounds)
+  const physical = clampRect(dipRectToImage(localSelection, displayBounds, imageSize), imageBounds)
   if (rectArea(physical) === 0) return null
 
   const output = image.crop(physical)
@@ -38,7 +38,10 @@ export function cropCapture(
     dataUrl: output.toDataURL(),
     width: outputSize.width,
     height: outputSize.height,
-    scaleFactor: capture.display.scaleFactor,
+    // How many image pixels the capture really holds per DIP. Taken from the
+    // image so the editor previews at true on-screen size even if the capturer
+    // handed back a frame that disagrees with the display's reported scale.
+    scaleFactor: displayBounds.width > 0 ? imageSize.width / displayBounds.width : 1,
     createdAt: new Date().toISOString(),
   }
 }

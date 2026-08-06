@@ -17,8 +17,8 @@ export type EditorState = {
   readonly draft: Draft | null
   /** Working crop frame while Crop is active; null otherwise. */
   readonly cropSession: { readonly rect: Rect } | null
-  /** Callout under the pointer, which shows its delete badge. */
-  readonly hoveredCalloutId: string | null
+  /** Annotation under the pointer (handles / callout badge). */
+  readonly hoveredAnnotationId: string | null
   /** Callout whose note is being typed, whose text the overlay draws instead. */
   readonly editingCalloutId: string | null
 }
@@ -30,14 +30,14 @@ export function createEditorState(doc: CaptureDocument): EditorState {
     style: defaultStyle(),
     draft: null,
     cropSession: null,
-    hoveredCalloutId: null,
+    hoveredAnnotationId: null,
     editingCalloutId: null,
   }
 }
 
-export function setHoveredCallout(state: EditorState, id: string | null): EditorState {
-  if (state.hoveredCalloutId === id) return state
-  return { ...state, hoveredCalloutId: id }
+export function setHoveredAnnotation(state: EditorState, id: string | null): EditorState {
+  if (state.hoveredAnnotationId === id) return state
+  return { ...state, hoveredAnnotationId: id }
 }
 
 export function setEditingCallout(state: EditorState, id: string | null): EditorState {

@@ -38,6 +38,27 @@ describe('constrainCropRect', () => {
       x: 600, y: 400, width: 200, height: 200,
     })
   })
+
+  it('snaps a fractional rect to whole image pixels', () => {
+    // Pointer positions divided by the view scale are fractional; a crop kept at
+    // sub-pixel precision resamples the whole screenshot on export.
+    expect(
+      constrainCropRect({ x: 137.4, y: 50.6, width: 299.2, height: 200.8 }, bounds),
+    ).toEqual({ x: 137, y: 51, width: 299, height: 201 })
+  })
+
+  it('produces whole pixels from every fractional drag offset', () => {
+    for (const offset of [0.1, 0.25, 0.5, 0.75, 0.9]) {
+      const rect = constrainCropRect(
+        { x: 10 + offset, y: 20 + offset, width: 100 + offset, height: 80 + offset },
+        bounds,
+      )
+      expect(Number.isInteger(rect.x)).toBe(true)
+      expect(Number.isInteger(rect.y)).toBe(true)
+      expect(Number.isInteger(rect.width)).toBe(true)
+      expect(Number.isInteger(rect.height)).toBe(true)
+    }
+  })
 })
 
 describe('moveCropRect', () => {
