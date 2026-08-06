@@ -22,6 +22,7 @@ import {
   previewDocument,
   redoState,
   setEditingCallout,
+  setSelectedAnnotation,
   setStyle,
   setTool,
   undoState,
@@ -84,6 +85,19 @@ let lastNonCropTool: ToolId = 'box'
 function applyTool(tool: ToolId, from: EditorState = state): void {
   if (tool !== 'crop') lastNonCropTool = tool
   store.set(setTool(from, tool))
+}
+
+/** Removes the selected annotation and drops the selection. */
+function deleteSelectedAnnotation(): void {
+  const id = state.selectedAnnotationId
+  if (!id) return
+  cancelCalloutEdit()
+  store.set(
+    setSelectedAnnotation(
+      commitDocument(state, removeAnnotation(currentDocument(state), id)),
+      null,
+    ),
+  )
 }
 
 const toolbar = createToolbar(toolbarRoot, {
@@ -391,6 +405,11 @@ document.addEventListener('keydown', (event) => {
     commitPendingCrop()
     const dataUrl = flattenToDataUrl()
     if (dataUrl) void bridge.saveAs(dataUrl)
+    return
+  }
+  if (!meta && (event.key === 'Delete' || event.key === 'Backspace')) {
+    event.preventDefault()
+    deleteSelectedAnnotation()
     return
   }
   if (!meta) {

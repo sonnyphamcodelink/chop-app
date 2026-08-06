@@ -9,6 +9,7 @@ import {
   previewDocument,
   setCropRect,
   setDraft,
+  setSelectedAnnotation,
   setStyle,
   setTool,
   undoState,
@@ -55,6 +56,35 @@ describe('setDraft', () => {
     const drafted = setDraft(createEditorState(base), beginDraft('box', { x: 1, y: 1 }))
     expect(drafted.draft?.tool).toBe('box')
     expect(setDraft(drafted, null).draft).toBeNull()
+  })
+})
+
+describe('setSelectedAnnotation', () => {
+  it('starts with nothing selected', () => {
+    expect(createEditorState(base).selectedAnnotationId).toBeNull()
+  })
+
+  it('stores and clears the selection', () => {
+    const selected = setSelectedAnnotation(createEditorState(base), 'b1')
+    expect(selected.selectedAnnotationId).toBe('b1')
+    expect(setSelectedAnnotation(selected, null).selectedAnnotationId).toBeNull()
+  })
+
+  it('is a no-op when the selection is unchanged', () => {
+    const selected = setSelectedAnnotation(createEditorState(base), 'b1')
+    expect(setSelectedAnnotation(selected, 'b1')).toBe(selected)
+  })
+
+  it('switching tools clears the selection', () => {
+    const selected = setSelectedAnnotation(createEditorState(base), 'b1')
+    expect(setTool(selected, 'arrow').selectedAnnotationId).toBeNull()
+  })
+
+  it('undo and redo clear the selection', () => {
+    const state = commitDocument(createEditorState(base), addAnnotation(base, box))
+    const selected = setSelectedAnnotation(state, 'b1')
+    expect(undoState(selected).selectedAnnotationId).toBeNull()
+    expect(redoState(undoState(selected)).selectedAnnotationId).toBeNull()
   })
 })
 

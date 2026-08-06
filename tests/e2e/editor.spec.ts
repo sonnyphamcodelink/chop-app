@@ -160,6 +160,53 @@ test('a placed box can be moved and resized in any tool mode', async () => {
     .toBeGreaterThan(moved.rect.width)
 })
 
+test('a selected box is deleted by the Delete key', async () => {
+  await sendCapture({
+    id: 'e2e-box-delete',
+    dataUrl: ONE_PIXEL_PNG,
+    width: 400,
+    height: 300,
+    createdAt: new Date().toISOString(),
+  })
+
+  const page = await app.firstWindow()
+  await expect(page.locator('#empty')).toBeHidden()
+  await page.getByRole('button', { name: 'Box' }).click()
+
+  const canvas = page.locator('#canvas')
+  const box = await canvas.boundingBox()
+  if (!box) throw new Error('canvas has no bounding box')
+
+  // Draw a box from (20,20) to (120,90) in canvas space.
+  await page.mouse.move(box.x + 20, box.y + 20)
+  await page.mouse.down()
+  await page.mouse.move(box.x + 120, box.y + 90)
+  await page.mouse.up()
+
+  await expect
+    .poll(async () => (await savedBox())?.rect.width, { timeout: 10_000 })
+    .toBeGreaterThan(0)
+
+  // Delete with nothing selected must leave the box alone.
+  await page.keyboard.press('Delete')
+  await expect
+    .poll(async () => (await savedBox())?.rect.width, { timeout: 10_000 })
+    .toBeGreaterThan(0)
+
+  // Click the box body to select it, then Delete removes it.
+  await page.mouse.click(box.x + 70, box.y + 55)
+  await page.keyboard.press('Delete')
+  await expect
+    .poll(async () => savedAnnotations(), { timeout: 10_000 })
+    .toEqual([])
+
+  // Undo brings the box back.
+  await page.keyboard.press('Meta+z')
+  await expect
+    .poll(async () => (await savedBox())?.rect.width, { timeout: 10_000 })
+    .toBeGreaterThan(0)
+})
+
 /** The single box in the most recently written document sidecar. */
 async function savedBox(): Promise<{
   rect: { x: number; y: number; width: number; height: number }

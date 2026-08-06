@@ -170,8 +170,9 @@ export function createCanvasView(canvas: HTMLCanvasElement): CanvasView {
   }
 
   /**
-   * Editor chrome for the annotation under the pointer (or the callout being
-   * typed into). Never drawn by `renderTo`, so it stays out of the export.
+   * Editor chrome for the annotation under the pointer, the one selected, or
+   * the callout being typed into. Never drawn by `renderTo`, so it stays out of
+   * the export.
    */
   function drawAnnotationChrome(
     ctx: CanvasRenderingContext2D,
@@ -179,7 +180,7 @@ export function createCanvasView(canvas: HTMLCanvasElement): CanvasView {
     doc: CaptureDocument,
     scale: number,
   ): void {
-    const id = state.editingCalloutId ?? state.hoveredAnnotationId
+    const id = state.editingCalloutId ?? state.selectedAnnotationId ?? state.hoveredAnnotationId
     if (!id) return
     const annotation = doc.annotations.find((a) => a.id === id)
     if (!annotation) return

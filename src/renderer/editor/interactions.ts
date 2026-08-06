@@ -20,6 +20,7 @@ import {
   setCropRect,
   setDraft,
   setHoveredAnnotation,
+  setSelectedAnnotation,
 } from '@shared/editor-state'
 import { type Point, rectContains } from '@shared/geometry'
 import {
@@ -80,12 +81,17 @@ type Gesture =
       readonly annotation: EditableAnnotation
       readonly origin: CaptureDocument
       readonly last: Point
+      /** Until the pointer travels far enough, this is still a click. */
+      readonly moved: boolean
     }
   | {
       readonly mode: 'annotation-resize'
       readonly annotation: EditableAnnotation
       readonly handle: AnnotationHandleId
       readonly origin: CaptureDocument
+      readonly last: Point
+      /** Until the pointer travels far enough, this is still a click. */
+      readonly moved: boolean
     }
 
 function newId(): string {
@@ -174,6 +180,7 @@ export function attachInteractions(
       if (editHit) {
         event.preventDefault()
         const origin = currentDocument(state)
+        store.set(setSelectedAnnotation(state, editHit.annotation.id))
         canvas.style.cursor = canvasCursor(
           editHit.handle
             ? { kind: 'resize', cursor: cursorForHandle(editHit.handle) }
@@ -185,15 +192,21 @@ export function attachInteractions(
               annotation: editHit.annotation,
               handle: editHit.handle,
               origin,
+              last: point,
+              moved: false,
             }
           : {
               mode: 'annotation-move',
               annotation: editHit.annotation,
               origin,
               last: point,
+              moved: false,
             }
         return
       }
+
+      // Pressing empty canvas drops the selection.
+      store.set(setSelectedAnnotation(state, null))
     }
 
     if (state.cropSession?.mode === 'reframe') {
@@ -288,6 +301,8 @@ export function attachInteractions(
     if (gesture.mode === 'annotation-move') {
       const dx = point.x - gesture.last.x
       const dy = point.y - gesture.last.y
+      const moved = gesture.moved || Math.hypot(dx, dy) * view.scale() > CALLOUT_DRAG_THRESHOLD
+      if (!moved) return
       store.set(
         previewDocument(
           state,
@@ -296,12 +311,15 @@ export function attachInteractions(
           ),
         ),
       )
-      gesture = { ...gesture, last: point }
+      gesture = { ...gesture, last: point, moved: true }
       return
     }
 
     if (gesture.mode === 'annotation-resize') {
-      const { annotation: target, handle } = gesture
+      const { annotation: target, handle, last } = gesture
+      const moved =
+        gesture.moved || Math.hypot(point.x - last.x, point.y - last.y) * view.scale() > CALLOUT_DRAG_THRESHOLD
+      if (!moved) return
       store.set(
         previewDocument(
           state,
@@ -317,6 +335,7 @@ export function attachInteractions(
           }),
         ),
       )
+      gesture = { ...gesture, last: point, moved: true }
       return
     }
 
@@ -404,6 +423,10 @@ export function attachInteractions(
       finished.mode === 'annotation-resize' ||
       finished.mode === 'callout-resize'
     ) {
+      // A click on an annotation selects it; a drag applies the change. Either
+      // way the preview resolves to the document, but only the drag commits it.
+      if (finished.mode === 'annotation-move' && !finished.moved) return
+      if (finished.mode === 'annotation-resize' && !finished.moved) return
       store.set(commitPreview(state, finished.origin))
       return
     }
@@ -446,7 +469,14 @@ export function attachInteractions(
       abandoned.mode === 'annotation-move' ||
       abandoned.mode === 'annotation-resize'
     ) {
-      if (abandoned.mode === 'callout-move' && !abandoned.moved) return
+      if (
+        (abandoned.mode === 'callout-move' ||
+          abandoned.mode === 'annotation-move' ||
+          abandoned.mode === 'annotation-resize') &&
+        !abandoned.moved
+      ) {
+        return
+      }
       store.set(commitPreview(store.get(), abandoned.origin))
       return
     }

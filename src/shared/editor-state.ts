@@ -19,6 +19,8 @@ export type EditorState = {
   readonly cropSession: CropSession | null
   /** Annotation under the pointer (handles / callout badge). */
   readonly hoveredAnnotationId: string | null
+  /** Annotation chosen by clicking, kept after the pointer moves away. */
+  readonly selectedAnnotationId: string | null
   /** Callout whose note is being typed, whose text the overlay draws instead. */
   readonly editingCalloutId: string | null
 }
@@ -31,6 +33,7 @@ export function createEditorState(doc: CaptureDocument): EditorState {
     draft: null,
     cropSession: null,
     hoveredAnnotationId: null,
+    selectedAnnotationId: null,
     editingCalloutId: null,
   }
 }
@@ -38,6 +41,11 @@ export function createEditorState(doc: CaptureDocument): EditorState {
 export function setHoveredAnnotation(state: EditorState, id: string | null): EditorState {
   if (state.hoveredAnnotationId === id) return state
   return { ...state, hoveredAnnotationId: id }
+}
+
+export function setSelectedAnnotation(state: EditorState, id: string | null): EditorState {
+  if (state.selectedAnnotationId === id) return state
+  return { ...state, selectedAnnotationId: id }
 }
 
 export function setEditingCallout(state: EditorState, id: string | null): EditorState {
@@ -50,9 +58,15 @@ export function currentDocument(state: EditorState): CaptureDocument {
 
 export function setTool(state: EditorState, tool: ToolId): EditorState {
   if (tool === 'crop') {
-    return { ...state, tool, draft: null, cropSession: reframeSession(currentDocument(state)) }
+    return {
+      ...state,
+      tool,
+      draft: null,
+      selectedAnnotationId: null,
+      cropSession: reframeSession(currentDocument(state)),
+    }
   }
-  return { ...state, tool, draft: null, cropSession: null }
+  return { ...state, tool, draft: null, cropSession: null, selectedAnnotationId: null }
 }
 
 function reframeSession(doc: CaptureDocument): CropSession {
@@ -139,14 +153,14 @@ export function cancelPreview(
 
 export function undoState(state: EditorState): EditorState {
   const history = undo(state.history)
-  const next = { ...state, history, draft: null }
+  const next = { ...state, history, draft: null, selectedAnnotationId: null }
   if (next.tool !== 'crop') return { ...next, cropSession: null }
   return { ...next, cropSession: reframeSession(history.present) }
 }
 
 export function redoState(state: EditorState): EditorState {
   const history = redo(state.history)
-  const next = { ...state, history, draft: null }
+  const next = { ...state, history, draft: null, selectedAnnotationId: null }
   if (next.tool !== 'crop') return { ...next, cropSession: null }
   return { ...next, cropSession: reframeSession(history.present) }
 }
