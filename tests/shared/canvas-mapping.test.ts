@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { backingScale, fitScale, viewToImage } from '@shared/canvas-mapping'
+import { backingScale, fitScale, imageToView, viewToImage } from '@shared/canvas-mapping'
 
 describe('fitScale', () => {
   it('shrinks an image larger than the viewport', () => {
@@ -41,6 +41,18 @@ describe('viewToImage', () => {
   it('combines scale and crop origin', () => {
     const crop = { x: 100, y: 100, width: 400, height: 300 }
     expect(viewToImage({ x: 50, y: 50 }, 0.5, crop)).toEqual({ x: 200, y: 200 })
+  })
+})
+
+describe('imageToView', () => {
+  it('inverts viewToImage, crop origin included', () => {
+    const crop = { x: 100, y: 100, width: 400, height: 300 }
+    const view = { x: 50, y: 50 }
+    expect(imageToView(viewToImage(view, 0.5, crop), 0.5, crop)).toEqual(view)
+  })
+
+  it('multiplies by the scale when there is no crop', () => {
+    expect(imageToView({ x: 200, y: 100 }, 0.5, null)).toEqual({ x: 100, y: 50 })
   })
 })
 

@@ -34,3 +34,11 @@ export function viewToImage(point: Point, scale: number, cropRect: Rect | null):
     y: point.y / scale + (cropRect?.y ?? 0),
   }
 }
+
+/** Inverse of `viewToImage`: image coordinates back to displayed-canvas space. */
+export function imageToView(point: Point, scale: number, cropRect: Rect | null): Point {
+  return {
+    x: (point.x - (cropRect?.x ?? 0)) * scale,
+    y: (point.y - (cropRect?.y ?? 0)) * scale,
+  }
+}

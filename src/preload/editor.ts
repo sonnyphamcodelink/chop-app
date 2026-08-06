@@ -22,4 +22,7 @@ contextBridge.exposeInMainWorld('chopEditor', {
   openCapture(id: string): Promise<unknown> {
     return ipcRenderer.invoke(CHANNELS.openCapture, id)
   },
+  deleteCapture(id: string): Promise<boolean> {
+    return ipcRenderer.invoke(CHANNELS.deleteCapture, id) as Promise<boolean>
+  },
 })

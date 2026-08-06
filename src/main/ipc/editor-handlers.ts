@@ -4,6 +4,7 @@ import { thumbnailSize } from '@shared/flatten'
 import { CHANNELS, type SaveRequest } from '@shared/ipc'
 import { captureBaseName, findRecord } from '@shared/manifest'
 import {
+  deleteCapture,
   loadCapture,
   readManifest,
   rebuildManifest,
@@ -108,6 +109,18 @@ export function registerEditorHandlers(rootDir: string): void {
       scaleFactor: 1,
       createdAt: record.createdAt,
       documentJson,
+    }
+  })
+
+  ipcMain.handle(CHANNELS.deleteCapture, async (_event, id: string) => {
+    try {
+      const deleted = await deleteCapture(rootDir, id)
+      // Free the reserved base name so a later capture never resaves over it.
+      if (deleted) namesById.delete(id)
+      return deleted
+    } catch (error) {
+      console.error('Failed to delete capture.', error)
+      return false
     }
   })
 }

@@ -1,5 +1,6 @@
+import { calloutBadgeRect } from './callout'
 import { HANDLE_HIT_SIZE, HANDLE_SIZE } from './constants'
-import type { Annotation, CaptureDocument } from './document'
+import type { Annotation, CalloutAnnotation, CaptureDocument } from './document'
 import {
   normalizeRect,
   offsetRect,
@@ -22,6 +23,18 @@ export function annotationBounds(annotation: Annotation): Rect {
       return annotation.rect
     case 'arrow':
       return normalizeRect(annotation.from, annotation.to)
+    case 'callout':
+      // The tail is part of the shape, so it belongs inside the bounds.
+      return normalizeRect(
+        {
+          x: Math.min(annotation.rect.x, annotation.tail.x),
+          y: Math.min(annotation.rect.y, annotation.tail.y),
+        },
+        {
+          x: Math.max(annotation.rect.x + annotation.rect.width, annotation.tail.x),
+          y: Math.max(annotation.rect.y + annotation.rect.height, annotation.tail.y),
+        },
+      )
     case 'text':
       return {
         x: annotation.at.x,
@@ -43,6 +56,37 @@ export function annotationAtPoint(
   for (let index = doc.annotations.length - 1; index >= 0; index -= 1) {
     const annotation = doc.annotations[index]!
     if (rectContains(annotationBounds(annotation), point)) return annotation
+  }
+  return null
+}
+
+/** Which part of a callout the pointer is over. */
+export type CalloutHit = {
+  readonly callout: CalloutAnnotation
+  /** `badge` is the delete control; `body` is the bubble itself. */
+  readonly part: 'badge' | 'body'
+}
+
+/**
+ * Front-most callout under the point, or null. Only the bubble and its badge
+ * count: the tail leaves a large empty area inside the annotation bounds.
+ * `scale` is CSS pixels per image pixel, which fixes the badge's grab area.
+ */
+export function calloutHitAtPoint(
+  doc: CaptureDocument,
+  point: Point,
+  scale = 1,
+): CalloutHit | null {
+  for (let index = doc.annotations.length - 1; index >= 0; index -= 1) {
+    const annotation = doc.annotations[index]!
+    if (annotation.kind !== 'callout') continue
+    // The badge straddles the corner, so it is tested before the bubble.
+    if (rectContains(calloutBadgeRect(annotation.rect, scale), point)) {
+      return { callout: annotation, part: 'badge' }
+    }
+    if (rectContains(annotation.rect, point)) {
+      return { callout: annotation, part: 'body' }
+    }
   }
   return null
 }
@@ -144,6 +188,12 @@ export function moveAnnotation(
         ...annotation,
         from: { x: annotation.from.x + dx, y: annotation.from.y + dy },
         to: { x: annotation.to.x + dx, y: annotation.to.y + dy },
+      }
+    case 'callout':
+      return {
+        ...annotation,
+        rect: offsetRect(annotation.rect, dx, dy),
+        tail: { x: annotation.tail.x + dx, y: annotation.tail.y + dy },
       }
     case 'text':
       return { ...annotation, at: { x: annotation.at.x + dx, y: annotation.at.y + dy } }

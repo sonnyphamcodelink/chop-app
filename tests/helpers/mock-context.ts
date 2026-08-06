@@ -25,6 +25,12 @@ export function createMockContext(): MockContext {
     closePath: record('closePath'),
     moveTo: record('moveTo'),
     lineTo: record('lineTo'),
+    quadraticCurveTo: record('quadraticCurveTo'),
+    // Rough stand-in for text metrics: one unit of width per character.
+    measureText: (text: string): TextMetrics => {
+      ops.push({ name: 'measureText', args: [text] })
+      return { width: text.length } as TextMetrics
+    },
     stroke: record('stroke'),
     fill: record('fill'),
     fillRect: record('fillRect'),
@@ -60,6 +66,9 @@ export function createMockContext(): MockContext {
     },
     set textBaseline(value: string) {
       ops.push({ name: 'set:textBaseline', args: [value] })
+    },
+    set textAlign(value: string) {
+      ops.push({ name: 'set:textAlign', args: [value] })
     },
     set lineJoin(value: string) {
       ops.push({ name: 'set:lineJoin', args: [value] })

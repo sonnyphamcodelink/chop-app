@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { emptyManifest } from '@shared/manifest'
 import {
+  deleteCapture,
   loadCapture,
   readManifest,
   rebuildManifest,
@@ -116,6 +117,47 @@ describe('rebuildManifest', () => {
 
   it('returns an empty manifest for an empty directory', async () => {
     await expect(rebuildManifest(root)).resolves.toEqual(emptyManifest())
+  })
+})
+
+describe('deleteCapture', () => {
+  it('removes the flat image and every sidecar file', async () => {
+    await saveCapture(root, input)
+
+    await deleteCapture(root, 'id-1')
+
+    const base = join(root, '.chop')
+    await expect(readFile(join(root, '2026-08-04 15-42-07.png'))).rejects.toThrow()
+    await expect(
+      readFile(join(base, 'originals', '2026-08-04 15-42-07.png')),
+    ).rejects.toThrow()
+    await expect(readFile(join(base, 'thumbs', '2026-08-04 15-42-07.png'))).rejects.toThrow()
+    await expect(readFile(join(base, 'docs', '2026-08-04 15-42-07.json'))).rejects.toThrow()
+  })
+
+  it('drops only the deleted record from the manifest', async () => {
+    await saveCapture(root, input)
+    await saveCapture(root, { ...input, id: 'id-2', name: '2026-08-04 16-00-00' })
+
+    await deleteCapture(root, 'id-1')
+
+    const manifest = await readManifest(root)
+    expect(manifest.records.map((r) => r.id)).toEqual(['id-2'])
+  })
+
+  it('reports whether a record was deleted', async () => {
+    await saveCapture(root, input)
+
+    await expect(deleteCapture(root, 'id-1')).resolves.toBe(true)
+    await expect(deleteCapture(root, 'missing')).resolves.toBe(false)
+  })
+
+  it('still deletes the record when some files are already gone', async () => {
+    await saveCapture(root, input)
+    await rm(join(root, '.chop', 'thumbs', '2026-08-04 15-42-07.png'))
+
+    await expect(deleteCapture(root, 'id-1')).resolves.toBe(true)
+    await expect(readManifest(root)).resolves.toEqual(emptyManifest())
   })
 })
 

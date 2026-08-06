@@ -23,11 +23,14 @@ let state: OverlayInit | null = null
 let dragOrigin: Point | null = null
 let currentRect: Rect | null = null
 
+/** Matches --guide in the stylesheet; the guides straddle the pointer. */
+const GUIDE_THICKNESS = 2
+
 function moveCrosshair(point: Point): void {
   crossX.style.display = 'block'
   crossY.style.display = 'block'
-  crossX.style.top = `${point.y}px`
-  crossY.style.left = `${point.x}px`
+  crossX.style.top = `${point.y - GUIDE_THICKNESS / 2}px`
+  crossY.style.left = `${point.x - GUIDE_THICKNESS / 2}px`
 }
 
 function hideCrosshair(): void {

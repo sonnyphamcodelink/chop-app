@@ -11,21 +11,43 @@ export function createFilmstrip(
   root: HTMLElement,
   list: () => Promise<readonly FilmstripEntry[]>,
   onOpen: (id: string) => void,
+  onDelete: (id: string) => void,
 ): Filmstrip {
   let activeId: string | null = null
+
+  function buildTile(entry: FilmstripEntry, thumbDataUrl: string): HTMLElement {
+    const tile = document.createElement('div')
+    tile.className = 'thumb'
+    tile.dataset.id = entry.id
+    tile.classList.toggle('active', entry.id === activeId)
+
+    const img = document.createElement('img')
+    img.src = thumbDataUrl
+    img.alt = entry.name
+    img.title = entry.name
+    img.addEventListener('click', () => onOpen(entry.id))
+
+    const remove = document.createElement('button')
+    remove.className = 'remove'
+    remove.type = 'button'
+    remove.textContent = '×'
+    remove.title = `Delete ${entry.name}`
+    remove.setAttribute('aria-label', `Delete ${entry.name}`)
+    // Without this the click falls through to the thumbnail and reopens it.
+    remove.addEventListener('click', (event) => {
+      event.stopPropagation()
+      onDelete(entry.id)
+    })
+
+    tile.append(img, remove)
+    return tile
+  }
 
   function paint(entries: readonly FilmstripEntry[]): void {
     root.replaceChildren()
     for (const entry of entries) {
       if (!entry.thumbDataUrl) continue
-      const img = document.createElement('img')
-      img.src = entry.thumbDataUrl
-      img.alt = entry.name
-      img.title = entry.name
-      img.dataset.id = entry.id
-      img.classList.toggle('active', entry.id === activeId)
-      img.addEventListener('click', () => onOpen(entry.id))
-      root.append(img)
+      root.append(buildTile(entry, entry.thumbDataUrl))
     }
   }
 

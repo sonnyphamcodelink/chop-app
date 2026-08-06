@@ -21,6 +21,8 @@ export const CHANNELS = {
   listCaptures: 'chop:list-captures',
   /** editor → main: load a past capture back into the editor */
   openCapture: 'chop:open-capture',
+  /** editor → main: delete a past capture and its sidecar files */
+  deleteCapture: 'chop:delete-capture',
   /** main → editor: trigger a new capture from the tray or a shortcut */
   requestCapture: 'chop:request-capture',
 } as const

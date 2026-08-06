@@ -1,13 +1,20 @@
-import { BLUR_SAMPLE_SIZE } from './constants'
+import { calloutTextWidth, readableTextColor, tailTriangle, wrapText } from './callout'
+import {
+  BLUR_SAMPLE_SIZE,
+  CALLOUT_CORNER_RADIUS,
+  CALLOUT_LINE_HEIGHT_RATIO,
+} from './constants'
 import type {
   Annotation,
   ArrowAnnotation,
   BlurAnnotation,
   BoxAnnotation,
+  CalloutAnnotation,
   CaptureDocument,
   HighlightAnnotation,
   TextAnnotation,
 } from './document'
+import type { Rect } from './geometry'
 
 /** Creates an offscreen drawing surface. Injected so rendering stays testable. */
 export type CanvasFactory = (
@@ -79,11 +86,79 @@ function drawHighlight(
   ctx.restore()
 }
 
+/** The single font annotations are drawn in, shared with measuring and editing. */
+export function annotationFont(fontSize: number): string {
+  return `${fontSize}px -apple-system, system-ui, sans-serif`
+}
+
 function drawText(ctx: CanvasRenderingContext2D, text: TextAnnotation): void {
   ctx.fillStyle = text.color
-  ctx.font = `${text.fontSize}px -apple-system, system-ui, sans-serif`
+  ctx.font = annotationFont(text.fontSize)
   ctx.textBaseline = 'top'
   ctx.fillText(text.text, text.at.x, text.at.y)
+}
+
+/** Traces a rounded rectangle. `roundRect` is skipped: it is not everywhere yet. */
+function traceRoundedRect(ctx: CanvasRenderingContext2D, rect: Rect, radius: number): void {
+  const r = Math.max(0, Math.min(radius, rect.width / 2, rect.height / 2))
+  const right = rect.x + rect.width
+  const bottom = rect.y + rect.height
+
+  ctx.beginPath()
+  ctx.moveTo(rect.x + r, rect.y)
+  ctx.lineTo(right - r, rect.y)
+  ctx.quadraticCurveTo(right, rect.y, right, rect.y + r)
+  ctx.lineTo(right, bottom - r)
+  ctx.quadraticCurveTo(right, bottom, right - r, bottom)
+  ctx.lineTo(rect.x + r, bottom)
+  ctx.quadraticCurveTo(rect.x, bottom, rect.x, bottom - r)
+  ctx.lineTo(rect.x, rect.y + r)
+  ctx.quadraticCurveTo(rect.x, rect.y, rect.x + r, rect.y)
+  ctx.closePath()
+}
+
+/**
+ * A filled bubble plus a tail, both in the annotation colour so they read as one
+ * shape, with the text wrapped to the bubble and centred inside it.
+ */
+function drawCallout(ctx: CanvasRenderingContext2D, callout: CalloutAnnotation): void {
+  const { rect } = callout
+
+  ctx.save()
+  ctx.fillStyle = callout.color
+
+  const [baseLeft, tip, baseRight] = tailTriangle(rect, callout.tail)
+  ctx.beginPath()
+  ctx.moveTo(baseLeft.x, baseLeft.y)
+  ctx.lineTo(tip.x, tip.y)
+  ctx.lineTo(baseRight.x, baseRight.y)
+  ctx.closePath()
+  ctx.fill()
+
+  traceRoundedRect(ctx, rect, CALLOUT_CORNER_RADIUS)
+  ctx.fill()
+
+  ctx.font = annotationFont(callout.fontSize)
+  const lines = wrapText(callout.text, calloutTextWidth(rect.width), (line) =>
+    ctx.measureText(line).width,
+  )
+  if (lines.length > 0) {
+    // Clipped so an oversized note is cut off by the bubble rather than spilling
+    // across the screenshot.
+    ctx.clip()
+    ctx.fillStyle = readableTextColor(callout.color)
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+
+    const lineHeight = callout.fontSize * CALLOUT_LINE_HEIGHT_RATIO
+    const centreX = rect.x + rect.width / 2
+    const top = rect.y + rect.height / 2 - (lines.length * lineHeight) / 2
+    lines.forEach((line, index) => {
+      ctx.fillText(line, centreX, top + lineHeight * (index + 0.5))
+    })
+  }
+
+  ctx.restore()
 }
 
 /**
@@ -149,6 +224,8 @@ function drawAnnotation(
       return drawText(ctx, annotation)
     case 'blur':
       return drawBlur(ctx, image, annotation, createCanvas)
+    case 'callout':
+      return drawCallout(ctx, annotation)
   }
 }
 

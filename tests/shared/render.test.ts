@@ -148,6 +148,60 @@ describe('renderDocument', () => {
     expect(ops.find((op) => op.name === 'fillText')?.args[0]).toBe('hello')
   })
 
+  it('fills a callout bubble and its tail in the annotation colour', () => {
+    const { ctx, ops } = createMockContext()
+    const callout: Annotation = {
+      id: 'c', kind: 'callout',
+      rect: { x: 40, y: 40, width: 200, height: 80 },
+      tail: { x: 140, y: 200 },
+      text: 'look here', color: '#ff3b30', fontSize: 18,
+    }
+    renderDocument(ctx, image, addAnnotation(createDocument('d', 800, 600), callout), factory())
+    expect(ops).toContainEqual({ name: 'set:fillStyle', args: ['#ff3b30'] })
+    // The tail tip is drawn as part of a filled triangle.
+    expect(ops).toContainEqual({ name: 'lineTo', args: [140, 200] })
+    expect(opNames(ops).filter((name) => name === 'fill').length).toBeGreaterThanOrEqual(2)
+  })
+
+  it('draws callout text in a colour that contrasts with the bubble', () => {
+    const { ctx, ops } = createMockContext()
+    const callout: Annotation = {
+      id: 'c', kind: 'callout',
+      rect: { x: 0, y: 0, width: 400, height: 80 },
+      tail: { x: 200, y: 160 },
+      text: 'note', color: '#ffffff', fontSize: 18,
+    }
+    renderDocument(ctx, image, addAnnotation(createDocument('d', 800, 600), callout), factory())
+    expect(ops).toContainEqual({ name: 'set:fillStyle', args: ['#000000'] })
+    expect(ops.find((op) => op.name === 'fillText')?.args[0]).toBe('note')
+  })
+
+  it('wraps callout text onto multiple lines when it will not fit', () => {
+    const { ctx, ops } = createMockContext()
+    // The mock measures one unit per character, so a narrow bubble forces a wrap.
+    const callout: Annotation = {
+      id: 'c', kind: 'callout',
+      rect: { x: 0, y: 0, width: 30, height: 80 },
+      tail: { x: 15, y: 160 },
+      text: 'one two three four five', color: '#ff3b30', fontSize: 18,
+    }
+    renderDocument(ctx, image, addAnnotation(createDocument('d', 800, 600), callout), factory())
+    expect(ops.filter((op) => op.name === 'fillText').length).toBeGreaterThan(1)
+  })
+
+  it('draws no text for a callout with none, but still draws the bubble', () => {
+    const { ctx, ops } = createMockContext()
+    const callout: Annotation = {
+      id: 'c', kind: 'callout',
+      rect: { x: 0, y: 0, width: 100, height: 40 },
+      tail: { x: 50, y: 80 },
+      text: '', color: '#ff3b30', fontSize: 18,
+    }
+    renderDocument(ctx, image, addAnnotation(createDocument('d', 800, 600), callout), factory())
+    expect(opNames(ops)).toContain('fill')
+    expect(opNames(ops)).not.toContain('fillText')
+  })
+
   it('renders annotations in document order', () => {
     const { ctx, ops } = createMockContext()
     const first: Annotation = {

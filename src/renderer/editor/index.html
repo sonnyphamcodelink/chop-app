@@ -22,8 +22,23 @@
       }
       #toolbar button { padding: 5px 10px; border-radius: 6px; cursor: pointer; }
       #toolbar .tool.active { background: #2f9bff; color: #fff; }
-      .swatches { display: flex; gap: 4px; margin-left: 8px; }
-      .swatch { width: 18px; height: 18px; border-radius: 50%; border: 1px solid #8888; padding: 0; }
+      /* Wide enough that a selected swatch's ring never touches its neighbour. */
+      .swatches { display: flex; gap: 9px; margin-left: 8px; }
+      .swatch {
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        border: 1px solid #8888;
+        padding: 0;
+        transition: transform 0.1s ease;
+      }
+      /* A gap in the toolbar's own colour, then a ring in the text colour, so
+         the marker contrasts with every swatch — including blue and white —
+         and follows the system light/dark theme. */
+      .swatch.active {
+        box-shadow: 0 0 0 2px Canvas, 0 0 0 4px CanvasText;
+        transform: scale(1.15);
+      }
       #stage {
         flex: 1 1 auto;
         display: grid;
@@ -43,6 +58,21 @@
         padding: 2px 4px;
         outline: none;
       }
+      /* Sits on the callout itself: no chrome, so the note looks typed onto it. */
+      #callout-input {
+        position: absolute;
+        display: none;
+        margin: 0;
+        padding: 0;
+        border: none;
+        outline: none;
+        background: transparent;
+        resize: none;
+        overflow: hidden;
+        text-align: center;
+        white-space: pre-wrap;
+        overflow-wrap: break-word;
+      }
       #filmstrip {
         flex: 0 0 auto;
         display: flex;
@@ -56,8 +86,15 @@
         height: 90px;
         box-sizing: border-box;
       }
+      .thumb {
+        position: relative;
+        flex: 0 0 auto;
+        /* Room for the delete button to sit proud of the top-right corner. */
+        padding: 6px 6px 0 0;
+      }
       #filmstrip img {
         /* Uniform tiles: every capture gets the same box, cropped to fill. */
+        display: block;
         width: 112px;
         height: 72px;
         object-fit: cover;
@@ -67,9 +104,27 @@
         cursor: pointer;
         border: 2px solid transparent;
         box-sizing: border-box;
-        flex: 0 0 auto;
       }
-      #filmstrip img.active { border-color: #2f9bff; }
+      /* Needs the id to outrank `#filmstrip img`'s transparent border. */
+      #filmstrip .thumb.active img { border-color: #2f9bff; }
+      .thumb .remove {
+        position: absolute;
+        top: 0;
+        right: 0;
+        width: 26px;
+        height: 26px;
+        padding: 0;
+        border: 1.5px solid rgba(255, 255, 255, 0.9);
+        border-radius: 50%;
+        background: rgba(0, 0, 0, 0.65);
+        color: #fff;
+        font: 18px/1 -apple-system, system-ui, sans-serif;
+        cursor: pointer;
+        opacity: 0.75;
+      }
+      .thumb:hover .remove,
+      .thumb .remove:focus-visible { opacity: 1; }
+      .thumb .remove:hover { background: #e5484d; }
       #empty { margin: auto; opacity: 0.6; }
     </style>
   </head>
@@ -78,6 +133,7 @@
     <div id="stage">
       <canvas id="canvas"></canvas>
       <input id="text-input" />
+      <textarea id="callout-input" rows="1" spellcheck="false"></textarea>
       <div id="empty">Press ⌘⇧2 to capture</div>
     </div>
     <div id="filmstrip"></div>
