@@ -12,4 +12,6 @@
 - Annotation objects should have sensible default proportions/sizes on first creation so users don't have to manually resize them. Confidence: 0.7
 - Prefers fixed positioning over movable decorative parts when motion adds no value (e.g., callout arrow anchored bottom-left and auto-stretching instead of being draggable). Confidence: 0.7
 - Expects standard keyboard deletion for annotations: pressing Delete while an object is selected should delete it. Confidence: 0.6
+- Wants all restyleable annotations (box, arrow, text, callout) to support recoloring after placement: selecting the object and clicking a toolbar color swatch should apply the color to that object as one undoable step, not just set a future default. Confidence: 0.8
 - Prefers implicit save-on-blur for text input fields: clicking outside an active text field (or otherwise moving focus away) should commit the entered text automatically rather than requiring an explicit Enter keypress. Confidence: 0.7
+- Requires custom cursors and dark UI elements to stay visible on dark/black capture backgrounds — dark elements need a light halo/outline beneath the dark core so they read on any background (reported as a bug: mouse hard to see when dragging over a black capture). Confidence: 0.85

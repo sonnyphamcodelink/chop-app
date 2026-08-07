@@ -26,6 +26,11 @@ describe('canvasCursor', () => {
     expect(RETICLE_CURSOR).not.toContain('%23ffd400')
   })
 
+  it('haloes the arms and dot in white so they read on dark captures', () => {
+    expect(RETICLE_CURSOR).toContain("stroke='%23fff' stroke-width='5'")
+    expect(RETICLE_CURSOR).toContain("%3Ccircle cx='16' cy='16' r='3.5' fill='%23fff'/%3E")
+  })
+
   it('keeps move and resize cursors when editing a placed shape', () => {
     expect(canvasCursor({ kind: 'move' })).toBe('move')
     expect(canvasCursor({ kind: 'resize', cursor: 'nwse-resize' })).toBe('nwse-resize')
@@ -38,6 +43,10 @@ describe('REGION_RETICLE_CURSOR', () => {
     expect(REGION_RETICLE_CURSOR).toContain("d='M20 0V40M0 20H40'")
     expect(REGION_RETICLE_CURSOR).toContain("stroke='%23000' stroke-opacity='.55'")
     expect(REGION_RETICLE_CURSOR).toContain(') 20 20, crosshair')
+  })
+
+  it('carries a light halo under the hairline for dark screens', () => {
+    expect(REGION_RETICLE_CURSOR).toContain("stroke='%23fff' stroke-opacity='.9' stroke-width='3'")
   })
 
   it('leaves the accent arms to the overlay, which has no 128px cursor cap', () => {

@@ -14,10 +14,13 @@ export async function runCaptureFlow(): Promise<CaptureResult | null> {
   if (inFlight) return null
   inFlight = true
   try {
-    const captures = await captureAllDisplays()
+    // The window list is independent of the screenshots, so grab both at once.
+    const [captures, windows] = await Promise.all([
+      captureAllDisplays(),
+      listCapturableWindows(resolveWindowProvider()),
+    ])
     if (captures.length === 0) return null
 
-    const windows = await listCapturableWindows(resolveWindowProvider())
     const selection = await showOverlays(captures, windows)
     if (!selection) return null
 

@@ -151,6 +151,7 @@ export function attachInteractions(
       if (calloutHit) {
         event.preventDefault()
         const origin = currentDocument(state)
+        store.set(setSelectedAnnotation(state, calloutHit.callout.id))
         if (calloutHit.part === 'handle') {
           canvas.style.cursor = canvasCursor({
             kind: 'resize',
