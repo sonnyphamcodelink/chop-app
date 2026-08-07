@@ -4,6 +4,7 @@ import { warmOverlays } from './capture/overlay-manager'
 import { getEditorWindow, sendCapture } from './editor-window'
 import { registerHotkeys, unregisterHotkeys } from './hotkeys'
 import { registerEditorHandlers } from './ipc/editor-handlers'
+import { openAtLoginState, setOpenAtLogin } from './login-item'
 import { defaultCaptureRoot } from './storage/capture-root'
 import { createTray } from './tray'
 import { checkForUpdates } from './updates'
@@ -38,6 +39,8 @@ if (!app.requestSingleInstanceLock()) {
       onCapture: () => void capture(),
       onOpenEditor: () => getEditorWindow().show(),
       onCheckForUpdates: () => void checkForUpdates({ silent: false }),
+      openAtLogin: openAtLoginState,
+      onToggleOpenAtLogin: (enabled) => void setOpenAtLogin(enabled),
       captureRoot: () => captureRoot,
     })
 
