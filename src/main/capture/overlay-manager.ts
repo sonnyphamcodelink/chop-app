@@ -1,4 +1,4 @@
-import { BrowserWindow, globalShortcut, ipcMain } from 'electron'
+import { BrowserWindow, globalShortcut, ipcMain, screen } from 'electron'
 import { join } from 'node:path'
 import type { DisplayInfo } from '@shared/coords'
 import { CHANNELS, type OverlayInit, type OverlaySelection } from '@shared/ipc'
@@ -47,8 +47,44 @@ function loadOverlay(overlay: BrowserWindow): Promise<void> {
 }
 
 /**
+ * One hidden, page-loaded window per display, reused across captures. Building a
+ * BrowserWindow and loading its page costs hundreds of milliseconds, so doing it
+ * ahead of the hotkey keeps the capture path to a payload send and a `show()`.
+ */
+const pool = new Map<number, BrowserWindow>()
+/** Windows whose overlay page has finished loading and can take an init payload. */
+const loaded = new Set<number>()
+let warming: Promise<void> | null = null
+
+/** Creates and loads pool windows for every connected display. Idempotent. */
+export function warmOverlays(): Promise<void> {
+  warming ??= (async () => {
+    const displays = screen.getAllDisplays()
+    await Promise.allSettled(
+      displays.map(async (display) => {
+        if (pool.has(display.id)) return
+        const overlay = createOverlayWindow({
+          id: display.id,
+          bounds: display.bounds,
+          scaleFactor: display.scaleFactor,
+        })
+        pool.set(display.id, overlay)
+        overlay.on('closed', () => {
+          pool.delete(display.id)
+          loaded.delete(display.id)
+        })
+        await loadOverlay(overlay)
+        loaded.add(display.id)
+      }),
+    )
+  })()
+  return warming
+}
+
+/**
  * Opens one overlay per display over the frozen screenshots and resolves with the
- * user's selection, or null if they cancelled. Always tears every overlay down.
+ * user's selection, or null if they cancelled. Windows are hidden, not destroyed,
+ * so the next capture starts from live pages.
  */
 export async function showOverlays(
   captures: readonly DisplayCapture[],
@@ -56,23 +92,53 @@ export async function showOverlays(
 ): Promise<OverlaySelection | null> {
   if (captures.length === 0) return null
 
-  const overlays = captures.map((capture) => ({
-    capture,
-    window: createOverlayWindow(capture.display),
-  }))
+  // Pages still loading from startup are awaited here, off the hotkey path when
+  // the warm finished in time.
+  await warmOverlays()
+
+  const displayIds = new Set(captures.map((capture) => capture.display.id))
+  // A display was unplugged: its pooled window is dead weight, drop it.
+  for (const [id, window] of pool) {
+    if (displayIds.has(id)) continue
+    pool.delete(id)
+    loaded.delete(id)
+    if (!window.isDestroyed()) window.destroy()
+  }
+
+  const overlays = await Promise.all(
+    captures.map(async (capture) => {
+      const { display } = capture
+      let window = pool.get(display.id)
+      if (!window || window.isDestroyed()) {
+        // A display was plugged in after the warm: build its window now.
+        window = createOverlayWindow(display)
+        pool.set(display.id, window)
+        window.on('closed', () => {
+          pool.delete(display.id)
+          loaded.delete(display.id)
+        })
+      }
+      window.setBounds(display.bounds)
+      if (!loaded.has(display.id)) {
+        await loadOverlay(window)
+        loaded.add(display.id)
+      }
+      return { capture, window }
+    }),
+  )
   let escapeRegistered = false
 
-  const closeAll = (): void => {
+  const hideAll = (): void => {
     ipcMain.removeAllListeners(CHANNELS.overlaySelection)
     ipcMain.removeAllListeners(CHANNELS.overlayCancel)
     if (escapeRegistered) globalShortcut.unregister('Escape')
     for (const { window } of overlays) {
-      if (!window.isDestroyed()) window.destroy()
+      if (!window.isDestroyed()) window.hide()
     }
   }
 
   try {
-    return await new Promise<OverlaySelection | null>((resolve, reject) => {
+    return await new Promise<OverlaySelection | null>((resolve) => {
       ipcMain.once(CHANNELS.overlaySelection, (_event, selection: OverlaySelection) => {
         resolve(selection)
       })
@@ -82,28 +148,18 @@ export async function showOverlays(
         console.warn('Could not register temporary Escape shortcut for capture overlay.')
       }
 
-      // allSettled, not all: one display failing must not abort the capture.
-      void Promise.allSettled(
-        overlays.map(async ({ capture, window }) => {
-          await loadOverlay(window)
-          const payload: OverlayInit = {
-            display: capture.display,
-            dataUrl: capture.dataUrl,
-            windows: windowsForDisplay(windows, capture.display),
-          }
-          window.webContents.send(CHANNELS.overlayInit, payload)
-          window.show()
-          window.focus()
-        }),
-      ).then((results) => {
-        const failures = results.filter((result) => result.status === 'rejected')
-        for (const failure of failures) {
-          console.warn('An overlay failed to open; continuing on other displays.', failure)
+      for (const { capture, window } of overlays) {
+        const payload: OverlayInit = {
+          display: capture.display,
+          dataUrl: capture.dataUrl,
+          windows: windowsForDisplay(windows, capture.display),
         }
-        if (failures.length === overlays.length) reject(new Error('every overlay failed'))
-      })
+        window.webContents.send(CHANNELS.overlayInit, payload)
+        window.show()
+        window.focus()
+      }
     })
   } finally {
-    closeAll()
+    hideAll()
   }
 }

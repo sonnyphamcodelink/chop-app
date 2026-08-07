@@ -27,7 +27,8 @@
       "Shell(git commit --amend -F - <<'EOF' chore: add commandcode project config and taste preferences Co-authored-by: CommandCodeBot <noreply@commandcode.ai> EOF)",
       "Shell(git add .commandcode/settings.json && git commit -F - <<'EOF' chore: update commandcode permission allowances Co-authored-by: CommandCodeBot <noreply@commandcode.ai> EOF)",
       "Shell(npx vitest run --reporter verbose 2 >& 1)",
-      "Shell(npm:*)"
+      "Shell(npm:*)",
+      "Shell(./resources/windowlist:*)"
     ],
     "deny": [],
     "defaultMode": "default"

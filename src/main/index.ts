@@ -1,5 +1,6 @@
 import { app, type Tray } from 'electron'
 import { runCaptureFlow } from './capture/capture-flow'
+import { warmOverlays } from './capture/overlay-manager'
 import { getEditorWindow, sendCapture } from './editor-window'
 import { registerHotkeys, unregisterHotkeys } from './hotkeys'
 import { registerEditorHandlers } from './ipc/editor-handlers'
@@ -39,6 +40,11 @@ if (!app.requestSingleInstanceLock()) {
       onCheckForUpdates: () => void checkForUpdates({ silent: false }),
       captureRoot: () => captureRoot,
     })
+
+    // Build hidden overlay and editor windows now, so the first hotkey press
+    // only pays for the screenshot, not window creation and page loads.
+    void warmOverlays()
+    getEditorWindow()
 
     // A dev build always looks stale against the newest release, so it never asks.
     if (app.isPackaged) void checkForUpdates({ silent: true })
