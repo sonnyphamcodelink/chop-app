@@ -21,6 +21,25 @@ System Settings → Privacy & Security → Screen Recording and relaunch.
 - Captures auto-save to `~/Pictures/Chop`; past captures appear in the filmstrip
   and reopen fully editable
 
+## Updates
+
+Chop checks for a newer version at launch and from the tray's
+**Check for Updates…**, then points you at the release page. It does not install
+updates itself: the macOS build is ad-hoc signed, and Squirrel's in-place
+update requires a Developer ID signature.
+
+Because this repo is private, release metadata lives in a separate public repo,
+`sonnyphamcodelink/chop-releases` — see `RELEASES_REPO` in
+`src/main/updates/release-feed.ts`. Nothing but a public URL ships in the app,
+so there is no token to leak.
+
+To publish a release:
+
+1. Bump `version` in `package.json` and commit it.
+2. `npm run package`
+3. Upload `release/Chop-<version>*.dmg` to a new release in the releases repo,
+   tagged `v<version>` — the tag is what the running app compares against.
+
 ## Develop
 
     npm run dev             # run the app

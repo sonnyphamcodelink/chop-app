@@ -31,7 +31,8 @@ import type { CaptureResult } from '@shared/ipc'
 import type { ToolId } from '@shared/tools'
 import { createCalloutInput, type CalloutInputGeometry } from './callout-input'
 import { browserCanvasFactory, createCanvasView, textMeasurer } from './canvas-view'
-import { createFilmstrip, type FilmstripEntry } from './filmstrip'
+import { createFilmstrip } from './filmstrip'
+import type { FilmstripEntry } from './filmstrip'
 import { attachInteractions } from './interactions'
 import { createTextInput } from './text-input'
 import { createToolbar } from './toolbar'
@@ -323,6 +324,13 @@ function clearEditor(): void {
   draw()
 }
 
+/** Opens the most recent capture so the editor has context on first load. */
+async function openLastCapture(): Promise<void> {
+  const captures = (await bridge.listCaptures()) as readonly FilmstripEntry[]
+  const first = captures[0]
+  if (first) void openCapture(first.id)
+}
+
 /** Deletes a capture outright — the filmstrip is the only undo. */
 async function deleteCapture(id: string): Promise<void> {
   try {
@@ -372,7 +380,9 @@ bridge.onCapture((capture) => {
   image.src = capture.dataUrl
 })
 
-void filmstrip.refresh()
+void filmstrip.refresh().then(() => {
+  if (!loaded) void openLastCapture()
+})
 // Paints the starting tool and colour before the first capture arrives.
 draw()
 

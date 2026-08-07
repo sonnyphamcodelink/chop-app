@@ -5,6 +5,7 @@ import { captureAccelerator } from './hotkey-accelerator'
 export type TrayHandlers = {
   onCapture(): void
   onOpenEditor(): void
+  onCheckForUpdates(): void
   captureRoot(): string
 }
 
@@ -30,6 +31,9 @@ export function createTray(handlers: TrayHandlers): Tray {
         label: 'Open Captures Folder',
         click: () => void shell.openPath(handlers.captureRoot()),
       },
+      { type: 'separator' },
+      { label: `Version ${app.getVersion()}`, enabled: false },
+      { label: 'Check for Updates…', click: handlers.onCheckForUpdates },
       { type: 'separator' },
       { label: 'Quit Chop', role: 'quit' },
     ]),

@@ -5,6 +5,7 @@ import { registerHotkeys, unregisterHotkeys } from './hotkeys'
 import { registerEditorHandlers } from './ipc/editor-handlers'
 import { defaultCaptureRoot } from './storage/capture-root'
 import { createTray } from './tray'
+import { checkForUpdates } from './updates'
 
 // Held at module scope so the tray is not garbage collected.
 let tray: Tray | null = null
@@ -35,8 +36,12 @@ if (!app.requestSingleInstanceLock()) {
     tray = createTray({
       onCapture: () => void capture(),
       onOpenEditor: () => getEditorWindow().show(),
+      onCheckForUpdates: () => void checkForUpdates({ silent: false }),
       captureRoot: () => captureRoot,
     })
+
+    // A dev build always looks stale against the newest release, so it never asks.
+    if (app.isPackaged) void checkForUpdates({ silent: true })
 
     app.on('activate', () => getEditorWindow().show())
   })
