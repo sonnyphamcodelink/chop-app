@@ -12,20 +12,28 @@ export type TextInputOptions = {
   readonly width?: number
   /** Existing text to edit, pre-selected so typing replaces it. */
   readonly initialText?: string
-  /** Called with the trimmed text. An empty field commits nothing. */
+  /** Fires on every keystroke so the caller can drive a live canvas preview. */
+  readonly onInput?: (text: string) => void
+  /** Called with the final text on Enter or blur. */
   readonly onCommit: (text: string) => void
+  /** Called on Escape, or when commit fires with empty text. */
+  readonly onCancel?: () => void
 }
 
 export type TextInput = {
   open(options: TextInputOptions): void
   close(): void
+  commit(): void
+  cancel(): void
+  readonly isOpen: boolean
 }
 
 /**
- * Canvas has no text entry, so an HTML input is positioned over the canvas and
- * committed on Enter or blur. The caller decides what the text becomes.
+ * Canvas has no text entry, so an HTML textarea is positioned over the canvas
+ * and committed on Enter or blur. An optional `onInput` callback fires on every
+ * keystroke so the caller can show a live preview on the canvas.
  */
-export function createTextInput(element: HTMLInputElement): TextInput {
+export function createTextInput(element: HTMLTextAreaElement): TextInput {
   let pending: TextInputOptions | null = null
 
   function close(): void {
@@ -33,13 +41,27 @@ export function createTextInput(element: HTMLInputElement): TextInput {
     element.value = ''
     element.style.display = 'none'
     element.style.width = ''
+    element.style.height = ''
   }
 
   function commit(): void {
     const text = element.value.trim()
     const options = pending
     close()
-    if (text && options) options.onCommit(text)
+    if (!options) return
+    if (text) options.onCommit(text)
+    else options.onCancel?.()
+  }
+
+  function cancel(): void {
+    const options = pending
+    close()
+    options?.onCancel?.()
+  }
+
+  function applyHeight(): void {
+    element.style.height = 'auto'
+    element.style.height = `${element.scrollHeight}px`
   }
 
   element.addEventListener('keydown', (event) => {
@@ -49,11 +71,17 @@ export function createTextInput(element: HTMLInputElement): TextInput {
     }
     if (event.key === 'Escape') {
       event.preventDefault()
-      close()
+      cancel()
     }
-    // Keep editor shortcuts from firing while typing.
     event.stopPropagation()
   })
+
+  element.addEventListener('input', () => {
+    if (!pending) return
+    pending.onInput?.(element.value)
+    applyHeight()
+  })
+
   element.addEventListener('blur', () => {
     if (pending) commit()
   })
@@ -68,9 +96,13 @@ export function createTextInput(element: HTMLInputElement): TextInput {
       element.style.font = annotationFont(options.style.fontSize * options.scale)
       element.style.color = options.style.color
       element.value = options.initialText ?? ''
+      applyHeight()
       element.focus()
       element.select()
     },
     close,
+    commit,
+    cancel,
+    get isOpen() { return pending !== null },
   }
 }

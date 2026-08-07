@@ -12,3 +12,4 @@
 - Annotation objects should have sensible default proportions/sizes on first creation so users don't have to manually resize them. Confidence: 0.7
 - Prefers fixed positioning over movable decorative parts when motion adds no value (e.g., callout arrow anchored bottom-left and auto-stretching instead of being draggable). Confidence: 0.7
 - Expects standard keyboard deletion for annotations: pressing Delete while an object is selected should delete it. Confidence: 0.6
+- Prefers implicit save-on-blur for text input fields: clicking outside an active text field (or otherwise moving focus away) should commit the entered text automatically rather than requiring an explicit Enter keypress. Confidence: 0.7
