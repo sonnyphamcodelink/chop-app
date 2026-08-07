@@ -104,9 +104,30 @@ function deleteSelectedAnnotation(): void {
   )
 }
 
+/** Recolors the selected annotation, if it has a color, as one undoable step. */
+function applyColor(color: string): void {
+  const styled = setStyle(state, { color })
+  const id = state.selectedAnnotationId
+  const target = id
+    ? currentDocument(state).annotations.find((a) => a.id === id)
+    : null
+  if (!target || target.kind === 'blur' || target.color === color) {
+    store.set(styled)
+    return
+  }
+  store.set(
+    commitDocument(
+      styled,
+      updateAnnotation(currentDocument(styled), target.id, (a) =>
+        a.kind === 'blur' ? a : { ...a, color },
+      ),
+    ),
+  )
+}
+
 const toolbar = createToolbar(toolbarRoot, {
   onTool: applyTool,
-  onColor: (color) => store.set(setStyle(state, { color })),
+  onColor: applyColor,
   onStrokeWidth: (strokeWidth) => store.set(setStyle(state, { strokeWidth })),
   onUndo: () => store.set(undoState(state)),
   onRedo: () => store.set(redoState(state)),
