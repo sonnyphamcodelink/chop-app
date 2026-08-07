@@ -11,7 +11,11 @@ extraResources:
     to: windowlist
   - from: resources/tray-icon.png
     to: tray-icon.png
+  # nativeImage picks the @2x file up from beside the 1x one on retina screens.
+  - from: resources/tray-icon@2x.png
+    to: tray-icon@2x.png
 mac:
+  icon: build/icon.png
   category: public.app-category.productivity
   target:
     - target: dmg
@@ -25,6 +29,7 @@ mac:
   extendInfo:
     NSScreenCaptureUsageDescription: Chop needs screen access to capture screenshots.
 win:
+  icon: build/icon.png
   target:
     - target: nsis
       arch: [x64]

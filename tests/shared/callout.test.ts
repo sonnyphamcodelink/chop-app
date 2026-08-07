@@ -1,11 +1,26 @@
 import { describe, expect, it } from 'vitest'
+import {
+  CALLOUT_DEFAULT_ASPECT,
+  CALLOUT_DEFAULT_WIDTH_SHARE,
+  CALLOUT_FONT_HEIGHT_RATIO,
+  CALLOUT_LINE_HEIGHT_RATIO,
+  CALLOUT_MIN_FONT_SIZE,
+  CALLOUT_MIN_TAIL_LENGTH,
+  CALLOUT_PADDING,
+} from '@shared/constants'
 import { addAnnotation, createDocument } from '@shared/document'
 import {
   calloutBadgeRect,
-  defaultTailPoint,
+  calloutFontSizeFor,
+  calloutHeightForFontSize,
+  calloutRectFor,
+  calloutTextWidth,
+  defaultCalloutSize,
+  fitCalloutFontSize,
   fitCalloutRect,
   hideCalloutText,
   readableTextColor,
+  tailBase,
   tailTriangle,
   updateCalloutText,
   wrapText,
@@ -14,41 +29,107 @@ import type { Rect } from '@shared/geometry'
 
 const bubble: Rect = { x: 100, y: 100, width: 200, height: 80 }
 
-describe('defaultTailPoint', () => {
-  it('sits below the bubble, centred on its width', () => {
-    const tail = defaultTailPoint(bubble)
-    expect(tail.x).toBe(200)
-    expect(tail.y).toBeGreaterThan(bubble.y + bubble.height)
+const LONG_NOTE =
+  'this note is long enough that it has to wrap across several lines to fit'
+
+/**
+ * Stands in for canvas text metrics: half the font size per character, which is
+ * about right for a sans-serif face and keeps expectations easy to reason about.
+ */
+const measurerFor = (fontSize: number) => (text: string) => text.length * fontSize * 0.5
+
+/** Height the wrapped note needs at `fontSize`, for asserting that it fits. */
+function wrappedHeight(rect: Rect, text: string, fontSize: number): number {
+  const lines = wrapText(text, calloutTextWidth(rect.width), measurerFor(fontSize))
+  return lines.length * fontSize * CALLOUT_LINE_HEIGHT_RATIO + CALLOUT_PADDING * 2
+}
+
+describe('calloutRectFor', () => {
+  const tip = { x: 200, y: 300 }
+
+  it('hangs the bubble above the release point, tail base under the pointer', () => {
+    const rect = calloutRectFor(tip, { x: 260, y: 200 }, 160, 80)
+    const [left, right] = tailBase(rect)
+    expect((left.x + right.x) / 2).toBeCloseTo(260)
+    expect(rect.y + rect.height).toBe(200)
+    expect(rect).toMatchObject({ width: 160, height: 80 })
   })
 
-  it('keeps a usable tail length for a very short bubble', () => {
-    const tail = defaultTailPoint({ x: 0, y: 0, width: 100, height: 4 })
-    expect(tail.y).toBeGreaterThan(20)
+  it('lifts a bubble released level with its target clear of it, so the tail shows', () => {
+    const rect = calloutRectFor(tip, { x: 400, y: 300 }, 160, 80)
+    expect(rect.y + rect.height).toBe(tip.y - CALLOUT_MIN_TAIL_LENGTH)
+  })
+
+  it('keeps the bubble above the target even when released below it', () => {
+    const rect = calloutRectFor(tip, { x: 400, y: 500 }, 160, 80)
+    expect(rect.y + rect.height).toBeLessThan(tip.y)
+    // The pointer still decides which way along the capture the note sits.
+    expect(rect.x).toBeGreaterThan(tip.x)
+  })
+})
+
+describe('defaultCalloutSize', () => {
+  it('takes its share of the capture, in caption proportions', () => {
+    const size = defaultCalloutSize({ width: 2000, height: 1200 }, 18)
+    expect(size.width).toBeCloseTo(2000 * CALLOUT_DEFAULT_WIDTH_SHARE)
+    expect(size.width / size.height).toBeCloseTo(CALLOUT_DEFAULT_ASPECT, 1)
+  })
+
+  it('grows with the capture, so one note reads the same at any resolution', () => {
+    const small = defaultCalloutSize({ width: 1000, height: 600 }, 18)
+    const large = defaultCalloutSize({ width: 4000, height: 2400 }, 18)
+    expect(large.width).toBeCloseTo(small.width * 4)
+  })
+
+  it('stays deep enough for a line of text on a capture too small for the aspect', () => {
+    const size = defaultCalloutSize({ width: 320, height: 240 }, 18)
+    expect(size.height).toBe(calloutHeightForFontSize(18))
+    expect(calloutFontSizeFor({ x: 0, y: 0, ...size })).toBe(18)
+  })
+})
+
+describe('calloutHeightForFontSize', () => {
+  it('inverts calloutFontSizeFor, so a default bubble writes at the size asked for', () => {
+    for (const fontSize of [12, 18, 32]) {
+      const height = calloutHeightForFontSize(fontSize)
+      expect(calloutFontSizeFor({ x: 0, y: 0, width: 200, height })).toBe(fontSize)
+    }
   })
 })
 
 describe('tailTriangle', () => {
+  const bottom = bubble.y + bubble.height
+
   it('points its tip at the tail', () => {
-    const [, tip] = tailTriangle(bubble, defaultTailPoint(bubble))
-    expect(tip).toEqual(defaultTailPoint(bubble))
+    const [, tip] = tailTriangle(bubble, { x: 132, y: 220 })
+    expect(tip).toEqual({ x: 132, y: 220 })
   })
 
-  it('anchors its base on the bubble edge nearest the tail', () => {
+  it('sits flush on the bottom edge, left of centre', () => {
     const [left, , right] = tailTriangle(bubble, { x: 200, y: 400 })
-    expect(left.y).toBeCloseTo(bubble.y + bubble.height)
-    expect(right.y).toBeCloseTo(bubble.y + bubble.height)
-    expect(left.x).not.toBeCloseTo(right.x)
+    expect(left.y).toBe(bottom)
+    expect(right.y).toBe(bottom)
+    expect(left.x).toBeGreaterThanOrEqual(bubble.x)
+    expect(right.x).toBeLessThan(bubble.x + bubble.width / 2)
   })
 
-  it('anchors on the side edge when the tail is off to one side', () => {
-    const [left, , right] = tailTriangle(bubble, { x: 600, y: 140 })
-    expect(left.x).toBeCloseTo(bubble.x + bubble.width)
-    expect(right.x).toBeCloseTo(bubble.x + bubble.width)
+  it('keeps the base put and only stretches, wherever the tip is', () => {
+    const [farLeft, , farRight] = tailTriangle(bubble, { x: -400, y: 400 })
+    const [nearLeft, , nearRight] = tailTriangle(bubble, { x: 600, y: 190 })
+    expect(farLeft).toEqual(nearLeft)
+    expect(farRight).toEqual(nearRight)
   })
 
-  it('degenerates without throwing when the tail is at the bubble centre', () => {
-    const centre = { x: bubble.x + bubble.width / 2, y: bubble.y + bubble.height / 2 }
-    expect(() => tailTriangle(bubble, centre)).not.toThrow()
+  it('collapses onto the edge rather than pointing back through the bubble', () => {
+    const [, tip] = tailTriangle(bubble, { x: 220, y: 20 })
+    expect(tip).toEqual({ x: 220, y: bottom })
+  })
+
+  it('keeps the base inside a bubble narrower than the usual inset', () => {
+    const narrow = { x: 0, y: 0, width: 12, height: 20 }
+    const [left, , right] = tailTriangle(narrow, { x: 6, y: 60 })
+    expect(left.x).toBeGreaterThanOrEqual(narrow.x)
+    expect(right.x).toBeLessThanOrEqual(narrow.x + narrow.width)
   })
 })
 
@@ -74,31 +155,96 @@ describe('fitCalloutRect', () => {
   })
 })
 
-describe('updateCalloutText', () => {
-  const measure = (text: string): number => text.length
-  const callout = {
-    id: 'c', kind: 'callout' as const,
-    rect: { x: 0, y: 0, width: 60, height: 200 },
-    tail: { x: 30, y: 260 },
-    text: 'before', color: '#ff3b30', fontSize: 18,
-  }
-
-  it('replaces the text and leaves a roomy bubble untouched', () => {
-    expect(updateCalloutText(callout, 'after', measure)).toEqual({
-      ...callout,
-      text: 'after',
-    })
+describe('calloutFontSizeFor', () => {
+  it('gives one line its share of the bubble\u2019s usable height', () => {
+    const rect = { x: 0, y: 0, width: 400, height: 200 }
+    const usable = rect.height - CALLOUT_PADDING * 2
+    const line = calloutFontSizeFor(rect) * CALLOUT_LINE_HEIGHT_RATIO
+    expect(line / usable).toBeCloseTo(CALLOUT_FONT_HEIGHT_RATIO, 1)
   })
 
-  it('grows the bubble and brings the tail with it when the note is longer', () => {
-    const cramped = { ...callout, rect: { ...callout.rect, height: 20 } }
-    const updated = updateCalloutText(cramped, 'one two three four five six', measure)
+  it('scales with the bubble, down to a readable floor', () => {
+    expect(calloutFontSizeFor({ x: 0, y: 0, width: 400, height: 400 })).toBeGreaterThan(
+      calloutFontSizeFor({ x: 0, y: 0, width: 400, height: 200 }),
+    )
+    expect(calloutFontSizeFor({ x: 0, y: 0, width: 40, height: 10 })).toBe(
+      CALLOUT_MIN_FONT_SIZE,
+    )
+  })
+})
+
+describe('fitCalloutFontSize', () => {
+  it('gives a roomy bubble big text', () => {
+    const roomy = { x: 0, y: 0, width: 400, height: 200 }
+    const fitted = fitCalloutFontSize(roomy, 'note', measurerFor)
+    // One short line: the height, not the width, is what limits it.
+    expect(fitted).toBe(calloutFontSizeFor(roomy))
+    expect(fitted).toBeGreaterThan(CALLOUT_MIN_FONT_SIZE * 4)
+  })
+
+  it('gives a taller bubble bigger text than a short one', () => {
+    const short = { x: 0, y: 0, width: 400, height: 60 }
+    const tall = { x: 0, y: 0, width: 400, height: 240 }
+    expect(fitCalloutFontSize(tall, 'a note', measurerFor)).toBeGreaterThan(
+      fitCalloutFontSize(short, 'a note', measurerFor),
+    )
+  })
+
+  it('shrinks the text so a long note still fits', () => {
+    const rect = { x: 0, y: 0, width: 300, height: 120 }
+    const short = fitCalloutFontSize(rect, 'hi', measurerFor)
+    const long = fitCalloutFontSize(rect, LONG_NOTE, measurerFor)
+    expect(long).toBeLessThan(short)
+    expect(wrappedHeight(rect, LONG_NOTE, long)).toBeLessThanOrEqual(rect.height)
+  })
+
+  it('never goes below the readable minimum', () => {
+    const tiny = { x: 0, y: 0, width: 40, height: 30 }
+    expect(fitCalloutFontSize(tiny, LONG_NOTE, measurerFor)).toBe(CALLOUT_MIN_FONT_SIZE)
+  })
+
+  it('fills the height for an empty bubble, so the first keystroke is big', () => {
+    const rect = { x: 0, y: 0, width: 200, height: 100 }
+    expect(fitCalloutFontSize(rect, '', measurerFor)).toBe(calloutFontSizeFor(rect))
+  })
+})
+
+describe('updateCalloutText', () => {
+  const callout = {
+    id: 'c', kind: 'callout' as const,
+    rect: { x: 0, y: 0, width: 300, height: 120 },
+    tail: { x: 150, y: 180 },
+    text: 'before', color: '#ff3b30', fontSize: 40,
+  }
+
+  it('replaces the text and re-sizes it to the bubble', () => {
+    const updated = updateCalloutText(callout, 'after', measurerFor)
+    expect(updated.text).toBe('after')
+    expect(updated.fontSize).toBe(fitCalloutFontSize(callout.rect, 'after', measurerFor))
+  })
+
+  it('shrinks the text rather than the bubble when the note grows', () => {
+    const updated = updateCalloutText(callout, LONG_NOTE, measurerFor)
+    expect(updated.fontSize).toBeLessThan(
+      fitCalloutFontSize(callout.rect, 'before', measurerFor),
+    )
+    expect(updated.rect).toEqual(callout.rect)
+  })
+
+  it('grows the bubble only once the text has hit its minimum size', () => {
+    const cramped = { ...callout, rect: { x: 0, y: 0, width: 40, height: 20 } }
+    const updated = updateCalloutText(cramped, LONG_NOTE, measurerFor)
+    expect(updated.fontSize).toBe(CALLOUT_MIN_FONT_SIZE)
     expect(updated.rect.height).toBeGreaterThan(cramped.rect.height)
-    expect(updated.tail.y).toBeGreaterThan(updated.rect.y + updated.rect.height)
+  })
+
+  it('leaves the tail tip on whatever the note points at', () => {
+    const aimed = { ...callout, tail: { x: 500, y: 20 } }
+    expect(updateCalloutText(aimed, 'after', measurerFor).tail).toEqual({ x: 500, y: 20 })
   })
 
   it('does not mutate the callout it was given', () => {
-    updateCalloutText(callout, 'something else entirely', measure)
+    updateCalloutText(callout, 'something else entirely', measurerFor)
     expect(callout.text).toBe('before')
   })
 })

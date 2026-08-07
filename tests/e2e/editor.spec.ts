@@ -104,6 +104,120 @@ test('drawing a box is undoable and lands in the saved document', async () => {
   await expect(page.getByRole('button', { name: 'Box' })).toHaveClass(/active/)
 })
 
+test('a placed box can be moved and resized in any tool mode', async () => {
+  await sendCapture({
+    id: 'e2e-box-edit',
+    dataUrl: ONE_PIXEL_PNG,
+    width: 400,
+    height: 300,
+    createdAt: new Date().toISOString(),
+  })
+
+  const page = await app.firstWindow()
+  await expect(page.locator('#empty')).toBeHidden()
+  await page.getByRole('button', { name: 'Box' }).click()
+
+  const canvas = page.locator('#canvas')
+  const box = await canvas.boundingBox()
+  if (!box) throw new Error('canvas has no bounding box')
+
+  // Draw a box from (20,20) to (120,90) in canvas space.
+  await page.mouse.move(box.x + 20, box.y + 20)
+  await page.mouse.down()
+  await page.mouse.move(box.x + 120, box.y + 90)
+  await page.mouse.up()
+
+  await expect
+    .poll(async () => (await savedBox())?.rect.width, { timeout: 10_000 })
+    .toBeGreaterThan(0)
+  const drawn = await savedBox()
+
+  // Switch away from Box — editing must still work, like callouts.
+  await page.getByRole('button', { name: 'Arrow' }).click()
+
+  // Drag the body to the right.
+  await page.mouse.move(box.x + 70, box.y + 55)
+  await page.mouse.down()
+  await page.mouse.move(box.x + 120, box.y + 55, { steps: 8 })
+  await page.mouse.up()
+
+  await expect
+    .poll(async () => (await savedBox())?.rect.x, { timeout: 10_000 })
+    .toBeCloseTo(drawn.rect.x + 50, 0)
+
+  const moved = await savedBox()
+
+  // Drag the south-east corner outward.
+  const seX = box.x + moved.rect.x + moved.rect.width
+  const seY = box.y + moved.rect.y + moved.rect.height
+  await page.mouse.move(seX, seY)
+  await page.mouse.down()
+  await page.mouse.move(seX + 40, seY + 30, { steps: 8 })
+  await page.mouse.up()
+
+  await expect
+    .poll(async () => (await savedBox())?.rect.width, { timeout: 10_000 })
+    .toBeGreaterThan(moved.rect.width)
+})
+
+test('a selected box is deleted by the Delete key', async () => {
+  await sendCapture({
+    id: 'e2e-box-delete',
+    dataUrl: ONE_PIXEL_PNG,
+    width: 400,
+    height: 300,
+    createdAt: new Date().toISOString(),
+  })
+
+  const page = await app.firstWindow()
+  await expect(page.locator('#empty')).toBeHidden()
+  await page.getByRole('button', { name: 'Box' }).click()
+
+  const canvas = page.locator('#canvas')
+  const box = await canvas.boundingBox()
+  if (!box) throw new Error('canvas has no bounding box')
+
+  // Draw a box from (20,20) to (120,90) in canvas space.
+  await page.mouse.move(box.x + 20, box.y + 20)
+  await page.mouse.down()
+  await page.mouse.move(box.x + 120, box.y + 90)
+  await page.mouse.up()
+
+  await expect
+    .poll(async () => (await savedBox())?.rect.width, { timeout: 10_000 })
+    .toBeGreaterThan(0)
+
+  // Delete with nothing selected must leave the box alone.
+  await page.keyboard.press('Delete')
+  await expect
+    .poll(async () => (await savedBox())?.rect.width, { timeout: 10_000 })
+    .toBeGreaterThan(0)
+
+  // Click the box body to select it, then Delete removes it.
+  await page.mouse.click(box.x + 70, box.y + 55)
+  await page.keyboard.press('Delete')
+  await expect
+    .poll(async () => savedAnnotations(), { timeout: 10_000 })
+    .toEqual([])
+
+  // Undo brings the box back.
+  await page.keyboard.press('Meta+z')
+  await expect
+    .poll(async () => (await savedBox())?.rect.width, { timeout: 10_000 })
+    .toBeGreaterThan(0)
+})
+
+/** The single box in the most recently written document sidecar. */
+async function savedBox(): Promise<{
+  rect: { x: number; y: number; width: number; height: number }
+}> {
+  const annotations = (await savedAnnotations()) as
+    | readonly { kind: string }[]
+    | undefined
+  const found = annotations?.find((a) => a.kind === 'box')
+  return found as never
+}
+
 test('a callout can be dragged around the capture and deleted from its badge', async () => {
   await sendCapture({
     id: 'e2e-callout-move',
@@ -120,30 +234,45 @@ test('a callout can be dragged around the capture and deleted from its badge', a
   const box = await page.locator('#canvas').boundingBox()
   if (!box) throw new Error('canvas has no bounding box')
 
-  await page.mouse.move(box.x + 20, box.y + 20)
+  // Press on what the note is about, release where the note should sit: the
+  // press fixes the arrow tip, the release hangs the bubble above it.
+  await page.mouse.move(box.x + 200, box.y + 250)
   await page.mouse.down()
-  await page.mouse.move(box.x + 160, box.y + 80)
+  await page.mouse.move(box.x + 120, box.y + 150, { steps: 10 })
   await page.mouse.up()
 
   await expect
     .poll(async () => (await savedCallout())?.rect.width, { timeout: 10_000 })
     .toBeGreaterThan(0)
   const drawn = await savedCallout()
+  expect(drawn.tail).toEqual({ x: 200, y: 250 })
+  expect(drawn.rect.y + drawn.rect.height).toBeCloseTo(150, 0)
 
-  // Drag the bubble itself: the whole annotation follows, tail included.
-  await page.mouse.move(box.x + 90, box.y + 50)
+  // A click with no drag aims at nothing, so it leaves the capture alone.
+  await page.mouse.click(box.x + 350, box.y + 200)
+  await expect
+    .poll(async () => (await savedAnnotations()) as readonly unknown[], { timeout: 10_000 })
+    .toHaveLength(1)
+
+  // Drag the bubble itself: it travels alone, the tail stretching to keep
+  // pointing at the same spot on the capture.
+  const centre = {
+    x: box.x + drawn.rect.x + drawn.rect.width / 2,
+    y: box.y + drawn.rect.y + drawn.rect.height / 2,
+  }
+  await page.mouse.move(centre.x, centre.y)
   await page.mouse.down()
-  await page.mouse.move(box.x + 140, box.y + 130, { steps: 10 })
+  await page.mouse.move(centre.x + 50, centre.y + 60, { steps: 10 })
   await page.mouse.up()
 
   await expect
     .poll(async () => (await savedCallout())?.rect.x, { timeout: 10_000 })
     .toBeCloseTo(drawn.rect.x + 50, 0)
   const moved = await savedCallout()
-  expect(moved.rect.y).toBeCloseTo(drawn.rect.y + 80, 0)
+  expect(moved.rect.y).toBeCloseTo(drawn.rect.y + 60, 0)
   expect(moved.rect.width).toBeCloseTo(drawn.rect.width, 0)
-  expect(moved.tail.x).toBeCloseTo(drawn.tail.x + 50, 0)
-  expect(moved.tail.y).toBeCloseTo(drawn.tail.y + 80, 0)
+  expect(moved.tail.x).toBeCloseTo(drawn.tail.x, 0)
+  expect(moved.tail.y).toBeCloseTo(drawn.tail.y, 0)
 
   // Undo returns it to where it was drawn, as one step.
   await page.keyboard.press('Meta+z')
@@ -152,10 +281,75 @@ test('a callout can be dragged around the capture and deleted from its badge', a
     .toBeCloseTo(drawn.rect.x, 0)
 
   // The badge straddles the bubble's top-right corner.
-  await page.mouse.click(box.x + 160, box.y + 20)
+  await page.mouse.click(
+    box.x + drawn.rect.x + drawn.rect.width,
+    box.y + drawn.rect.y,
+  )
   await expect
     .poll(async () => savedAnnotations(), { timeout: 10_000 })
     .toEqual([])
+})
+
+test('a callout resizes from its handles, resizing its text to match', async () => {
+  await sendCapture({
+    id: 'e2e-callout-resize',
+    dataUrl: ONE_PIXEL_PNG,
+    width: 400,
+    height: 300,
+    createdAt: new Date().toISOString(),
+  })
+
+  const page = await app.firstWindow()
+  await expect(page.locator('#empty')).toBeHidden()
+  await page.getByRole('button', { name: 'Callout' }).click()
+
+  const box = await page.locator('#canvas').boundingBox()
+  if (!box) throw new Error('canvas has no bounding box')
+  const at = (x: number, y: number): { x: number; y: number } => ({
+    x: box.x + x,
+    y: box.y + y,
+  })
+
+  async function drag(from: { x: number; y: number }, to: { x: number; y: number }) {
+    await page.mouse.move(from.x, from.y)
+    await page.mouse.down()
+    await page.mouse.move(to.x, to.y, { steps: 10 })
+    await page.mouse.up()
+  }
+
+  await drag(at(200, 250), at(120, 150))
+  await expect
+    .poll(async () => (await savedCallout())?.rect.width, { timeout: 10_000 })
+    .toBeGreaterThan(0)
+  const drawn = await savedCallout()
+  const centre = at(
+    drawn.rect.x + drawn.rect.width / 2,
+    drawn.rect.y + drawn.rect.height / 2,
+  )
+
+  // Write a note so there is text to re-size with the bubble.
+  await page.mouse.click(centre.x, centre.y)
+  await page.keyboard.type('resize me')
+  await page.keyboard.press('Enter')
+  await expect
+    .poll(async () => (await savedCallout())?.text, { timeout: 10_000 })
+    .toBe('resize me')
+  const typed = await savedCallout()
+
+  // Drag the south-east handle out: the bubble grows and so does its text.
+  const southEast = at(
+    drawn.rect.x + drawn.rect.width,
+    drawn.rect.y + drawn.rect.height,
+  )
+  await drag(southEast, { x: southEast.x + 100, y: southEast.y + 100 })
+  await expect
+    .poll(async () => (await savedCallout())?.rect.height, { timeout: 10_000 })
+    .toBeCloseTo(drawn.rect.height + 100, 0)
+  const enlarged = await savedCallout()
+  expect(enlarged.rect.width).toBeCloseTo(drawn.rect.width + 100, 0)
+  expect(enlarged.fontSize).toBeGreaterThan(typed.fontSize)
+  // The tail tip stays on what the note points at while the bubble grows.
+  expect(enlarged.tail).toEqual(drawn.tail)
 })
 
 test('a callout is drawn empty, then clicked to write and rewrite its note', async () => {
@@ -175,9 +369,9 @@ test('a callout is drawn empty, then clicked to write and rewrite its note', asy
   const box = await canvas.boundingBox()
   if (!box) throw new Error('canvas has no bounding box')
 
-  await page.mouse.move(box.x + 20, box.y + 20)
+  await page.mouse.move(box.x + 200, box.y + 250)
   await page.mouse.down()
-  await page.mouse.move(box.x + 160, box.y + 80)
+  await page.mouse.move(box.x + 120, box.y + 150)
   await page.mouse.up()
 
   // The drag commits the bubble on its own, with no field in the way.
@@ -189,7 +383,11 @@ test('a callout is drawn empty, then clicked to write and rewrite its note', asy
 
   // Any tool can write the note, not just Callout.
   await page.getByRole('button', { name: 'Box' }).click()
-  const insideBubble = { x: box.x + 90, y: box.y + 50 }
+  const drawn = await savedCallout()
+  const insideBubble = {
+    x: box.x + drawn.rect.x + drawn.rect.width / 2,
+    y: box.y + drawn.rect.y + drawn.rect.height / 2,
+  }
   await page.mouse.click(insideBubble.x, insideBubble.y)
   await expect(note).toBeVisible()
   await page.keyboard.type('check this')
@@ -223,6 +421,7 @@ async function savedCallout(): Promise<{
   rect: { x: number; y: number; width: number; height: number }
   tail: { x: number; y: number }
   text: string
+  fontSize: number
 }> {
   const annotations = (await savedAnnotations()) as
     | readonly { kind: string }[]
@@ -293,6 +492,43 @@ test('Enter saves a crop and Escape abandons it', async () => {
       timeout: 10_000,
     })
     .toMatchObject({ width: expect.any(Number) })
+})
+
+test('dragging an edge in a drawing tool trims the capture on mouse release', async () => {
+  await sendCapture({
+    id: 'e2e-5',
+    dataUrl: ONE_PIXEL_PNG,
+    width: 400,
+    height: 300,
+    createdAt: new Date().toISOString(),
+  })
+
+  const page = await app.firstWindow()
+  await expect(page.locator('#empty')).toBeHidden()
+
+  // Box is the starting tool: the trim handles have to work without leaving it.
+  await expect(page.getByRole('button', { name: 'Box' })).toHaveClass(/active/)
+
+  const canvas = page.locator('#canvas')
+  const before = await canvas.boundingBox()
+  if (!before) throw new Error('canvas has no bounding box')
+
+  // Grab the south-east corner handle and cut 100px off both edges.
+  await page.mouse.move(before.x + before.width - 2, before.y + before.height - 2)
+  await page.mouse.down()
+  await page.mouse.move(before.x + before.width - 100, before.y + before.height - 100)
+  await page.mouse.up()
+
+  // No Enter, no tool change: releasing the mouse is what applies it.
+  await expect(page.getByRole('button', { name: 'Box' })).toHaveClass(/active/)
+  await expect
+    .poll(async () => (await savedCropRect()) as { width?: number } | null, { timeout: 10_000 })
+    .toMatchObject({ width: expect.any(Number) })
+
+  // The view resized to the frame rather than keeping the original canvas.
+  const after = await canvas.boundingBox()
+  expect(after?.width).toBeLessThan(before.width)
+  expect(after?.height).toBeLessThan(before.height)
 })
 
 test('the tray keeps the app alive after the editor closes', async () => {

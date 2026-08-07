@@ -1,13 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import { addAnnotation, type Annotation, createDocument, setCrop } from '@shared/document'
 import {
+  beginTrim,
   commitCrop,
   commitDocument,
   createEditorState,
   currentDocument,
   previewDocument,
-  setCropSession,
+  setCropRect,
   setDraft,
+  setSelectedAnnotation,
   setStyle,
   setTool,
   undoState,
@@ -54,6 +56,35 @@ describe('setDraft', () => {
     const drafted = setDraft(createEditorState(base), beginDraft('box', { x: 1, y: 1 }))
     expect(drafted.draft?.tool).toBe('box')
     expect(setDraft(drafted, null).draft).toBeNull()
+  })
+})
+
+describe('setSelectedAnnotation', () => {
+  it('starts with nothing selected', () => {
+    expect(createEditorState(base).selectedAnnotationId).toBeNull()
+  })
+
+  it('stores and clears the selection', () => {
+    const selected = setSelectedAnnotation(createEditorState(base), 'b1')
+    expect(selected.selectedAnnotationId).toBe('b1')
+    expect(setSelectedAnnotation(selected, null).selectedAnnotationId).toBeNull()
+  })
+
+  it('is a no-op when the selection is unchanged', () => {
+    const selected = setSelectedAnnotation(createEditorState(base), 'b1')
+    expect(setSelectedAnnotation(selected, 'b1')).toBe(selected)
+  })
+
+  it('switching tools clears the selection', () => {
+    const selected = setSelectedAnnotation(createEditorState(base), 'b1')
+    expect(setTool(selected, 'arrow').selectedAnnotationId).toBeNull()
+  })
+
+  it('undo and redo clear the selection', () => {
+    const state = commitDocument(createEditorState(base), addAnnotation(base, box))
+    const selected = setSelectedAnnotation(state, 'b1')
+    expect(undoState(selected).selectedAnnotationId).toBeNull()
+    expect(redoState(undoState(selected)).selectedAnnotationId).toBeNull()
   })
 })
 
@@ -112,16 +143,86 @@ describe('crop session', () => {
     expect(setTool(cropping, 'box').cropSession).toBeNull()
   })
 
+  it('entering crop opens a reframe session', () => {
+    expect(setTool(createEditorState(base), 'crop').cropSession?.mode).toBe('reframe')
+  })
+})
+
+describe('trimming outside the crop tool', () => {
+  it('opens a trim session on the frame it was handed, keeping the tool', () => {
+    const drawing = setTool(createEditorState(base), 'box')
+    const trimming = beginTrim(drawing, { x: 0, y: 0, width: 800, height: 600 })
+    expect(trimming.cropSession).toEqual({
+      rect: { x: 0, y: 0, width: 800, height: 600 },
+      mode: 'trim',
+    })
+    expect(trimming.tool).toBe('box')
+  })
+
+  it('drops any draft, so a half-started shape is not left behind the frame', () => {
+    const drafted = setDraft(setTool(createEditorState(base), 'box'), beginDraft('box', { x: 1, y: 1 }))
+    expect(beginTrim(drafted, { x: 0, y: 0, width: 800, height: 600 }).draft).toBeNull()
+  })
+
+  it('commitCrop writes the crop and ends the session, since the mouse is already up', () => {
+    const trimming = setCropRect(
+      beginTrim(setTool(createEditorState(base), 'box'), { x: 0, y: 0, width: 800, height: 600 }),
+      { x: 0, y: 0, width: 500, height: 400 },
+    )
+    const committed = commitCrop(trimming)
+    expect(currentDocument(committed).cropRect).toEqual({
+      x: 0, y: 0, width: 500, height: 400,
+    })
+    expect(committed.cropSession).toBeNull()
+    expect(committed.tool).toBe('box')
+  })
+
+  it('a trim that changed nothing still ends the session and writes no history', () => {
+    const drawing = setTool(createEditorState(base), 'box')
+    const trimming = beginTrim(drawing, { x: 0, y: 0, width: 800, height: 600 })
+    const committed = commitCrop(trimming)
+    expect(committed.cropSession).toBeNull()
+    expect(committed.history.past).toHaveLength(0)
+    expect(currentDocument(committed).cropRect).toBeNull()
+  })
+
+  it('undo steps back over a committed trim in one go', () => {
+    const trimming = setCropRect(
+      beginTrim(setTool(createEditorState(base), 'box'), { x: 0, y: 0, width: 800, height: 600 }),
+      { x: 0, y: 0, width: 500, height: 400 },
+    )
+    expect(currentDocument(undoState(commitCrop(trimming))).cropRect).toBeNull()
+  })
+
+  it('a second trim cuts further into the crop the first one left', () => {
+    const first = commitCrop(
+      setCropRect(
+        beginTrim(setTool(createEditorState(base), 'box'), { x: 0, y: 0, width: 800, height: 600 }),
+        { x: 0, y: 0, width: 500, height: 400 },
+      ),
+    )
+    const second = commitCrop(
+      setCropRect(beginTrim(first, { x: 0, y: 0, width: 500, height: 400 }), {
+        x: 20, y: 30, width: 300, height: 200,
+      }),
+    )
+    expect(currentDocument(second).cropRect).toEqual({
+      x: 20, y: 30, width: 300, height: 200,
+    })
+  })
+})
+
+describe('the crop tool frame', () => {
   it('updates the working rect without touching history', () => {
     const cropping = setTool(createEditorState(base), 'crop')
-    const next = setCropSession(cropping, { x: 5, y: 5, width: 50, height: 40 })
+    const next = setCropRect(cropping, { x: 5, y: 5, width: 50, height: 40 })
     expect(next.cropSession?.rect).toEqual({ x: 5, y: 5, width: 50, height: 40 })
     expect(next.history.past).toHaveLength(0)
     expect(currentDocument(next).cropRect).toBeNull()
   })
 
   it('commitCrop writes cropRect and keeps the session on that rect', () => {
-    const cropping = setCropSession(
+    const cropping = setCropRect(
       setTool(createEditorState(base), 'crop'),
       { x: 5, y: 5, width: 50, height: 40 },
     )
@@ -140,7 +241,7 @@ describe('crop session', () => {
       createEditorState(base),
       setCrop(base, { x: 10, y: 20, width: 100, height: 80 }),
     )
-    const cropping = setCropSession(
+    const cropping = setCropRect(
       setTool(cropped, 'crop'),
       { x: 10, y: 20, width: 100, height: 80 },
     )
@@ -163,7 +264,7 @@ describe('crop session', () => {
       createEditorState(base),
       setCrop(base, { x: 10, y: 20, width: 100, height: 80 }),
     )
-    const cropping = setCropSession(
+    const cropping = setCropRect(
       setTool(cropped, 'crop'),
       { x: 15, y: 20, width: 100, height: 80 },
     )

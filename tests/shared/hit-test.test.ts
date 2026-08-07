@@ -5,10 +5,13 @@ import { rectContains } from '@shared/geometry'
 import {
   annotationAtPoint,
   annotationBounds,
+  annotationHandleAtPoint,
   calloutHitAtPoint,
+  editableHitAtPoint,
   handleAtPoint,
   handleRects,
   moveAnnotation,
+  resizeAnnotation,
   resizeRect,
 } from '@shared/hit-test'
 
@@ -214,6 +217,69 @@ describe('resizeRect', () => {
   })
 })
 
+describe('editableHitAtPoint', () => {
+  const doc = addAnnotation(
+    addAnnotation(createDocument('d', 800, 600), box),
+    { id: 'blur', kind: 'blur', rect: { x: 10, y: 10, width: 100, height: 50 } },
+  )
+
+  it('hits a box and ignores highlight/blur on top of it', () => {
+    // Blur is front-most but not editable; the box under it still answers.
+    expect(editableHitAtPoint(doc, { x: 50, y: 30 })).toMatchObject({
+      annotation: { id: 'box' },
+      handle: null,
+    })
+  })
+
+  it('prefers a handle over the body', () => {
+    expect(editableHitAtPoint(doc, { x: 110, y: 60 })?.handle).toBe('se')
+  })
+
+  it('hits an arrow endpoint', () => {
+    const withArrow = addAnnotation(createDocument('d', 800, 600), arrow)
+    expect(editableHitAtPoint(withArrow, { x: 100, y: 150 })).toMatchObject({
+      annotation: { id: 'arrow' },
+      handle: 'to',
+    })
+  })
+})
+
+describe('resizeAnnotation', () => {
+  it('resizes a box via its south-east handle', () => {
+    expect(resizeAnnotation(box, 'se', { x: 200, y: 100 })).toMatchObject({
+      rect: { x: 10, y: 10, width: 190, height: 90 },
+    })
+  })
+
+  it('moves an arrow endpoint', () => {
+    expect(resizeAnnotation(arrow, 'from', { x: 0, y: 0 })).toMatchObject({
+      from: { x: 0, y: 0 },
+      to: arrow.to,
+    })
+  })
+
+  it('scales text from a corner and keeps a usable font size', () => {
+    const resized = resizeAnnotation(text, 'se', { x: 500, y: 400 })
+    expect(resized.kind).toBe('text')
+    if (resized.kind !== 'text') return
+    expect(resized.at).toEqual(text.at)
+    expect(resized.fontSize).toBeGreaterThan(text.fontSize)
+  })
+})
+
+describe('annotationHandleAtPoint', () => {
+  it('finds a box corner', () => {
+    expect(annotationHandleAtPoint(box, { x: 110, y: 60 })).toBe('se')
+  })
+
+  it('finds only text corners, not edge midpoints', () => {
+    const bounds = annotationBounds(text)
+    const midTop = { x: bounds.x + bounds.width / 2, y: bounds.y }
+    expect(annotationHandleAtPoint(text, midTop)).toBeNull()
+    expect(annotationHandleAtPoint(text, { x: bounds.x, y: bounds.y })).toBe('nw')
+  })
+})
+
 describe('moveAnnotation', () => {
   it('offsets a box rect', () => {
     const moved = moveAnnotation(box, 5, -5)
@@ -226,7 +292,7 @@ describe('moveAnnotation', () => {
     })
   })
 
-  it('moves a callout bubble and its tail together', () => {
+  it('moves a callout bubble but leaves its tail tip on what it points at', () => {
     const callout: Annotation = {
       id: 'c', kind: 'callout',
       rect: { x: 100, y: 100, width: 200, height: 80 },
@@ -235,7 +301,7 @@ describe('moveAnnotation', () => {
     }
     expect(moveAnnotation(callout, 10, -20)).toMatchObject({
       rect: { x: 110, y: 80, width: 200, height: 80 },
-      tail: { x: 210, y: 240 },
+      tail: { x: 200, y: 260 },
     })
   })
 

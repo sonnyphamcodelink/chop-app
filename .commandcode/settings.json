@@ -1,0 +1,35 @@
+{
+  "permissions": {
+    "allow": [
+      "Shell(npx vitest run --reporter=dot 2 >& 1)",
+      "Shell(git add src/ tests/ && git commit -F - <<'EOF' refactor: redesign callout tail and default bubble sizing Aim callouts by dragging from the target to where the note should sit: the press marks what the note points at, the release places the bubble. The tail leaves a fixed span on the bubble's bottom edge, so it follows the bubble instead of being aimed by a separate handle; moving a callout stretches the tail to keep reaching its target. Unsized bubbles now take a caption-shaped share of the capture's visible width rather than a multiple of the font size, so one note lands usable on a small region grab and a 5K screenshot alike. Font size keeps scaling with the bubble, refitted via an explicit inverse of the fitting rule, and a drag too small to be a shape leaves nothing behind. Co-authored-by: CommandCodeBot <noreply@commandcode.ai> EOF)",
+      "Shell(git:*)",
+      "Shell(ls -la ~/.claude/ 2>/dev/null | head -30; echo \"---PLUGINS---\"; ls ~/.claude/plugins/ 2>/dev/null; echo \"---SKILLS---\"; ls ~/.claude/skills/ 2>/dev/null | head -30)",
+      "Shell(ls -la .claude 2>/dev/null; echo \"---\"; ls .superpowers 2>/dev/null | head; echo \"---find skills---\"; find . -maxdepth 4 -name \"SKILL.md\" -not -path \"*/node_modules/*\" 2>/dev/null | head -30)",
+      "Shell(cat ~/.claude/plugins/installed_plugins.json 2>/dev/null; echo \"---MARKETPLACES---\"; cat ~/.claude/plugins/known_marketplaces.json 2>/dev/null | head -40)",
+      "Shell(ls:*)",
+      "Shell(cat .claude/settings.json .claude/settings.local.json 2>/dev/null; echo \"---LAUNCH---\"; cat .claude/launch.json 2>/dev/null; echo \"---SUPERPOWERS---\"; ls -la .superpowers/; find .superpowers -type f | head -20)",
+      "Shell(python3 -m json.tool)",
+      "Shell(find:*)",
+      "Shell(ls ~/.commandcode/skills/ 2>/dev/null; echo \"---exit $?---\"; ls -la ~/.commandcode/ | head)",
+      "Shell(for:*)",
+      "Shell(do:*)",
+      "Shell(done:*)",
+      "Shell(mkdir -p ~/.commandcode/skills && SP=~/.claude/plugins/cache/claude-plugins-official/superpowers/6.2.0/skills && for d in \"$SP\"/*/; do name=$(basename \"$d\"); ln -sfn \"$d\" ~/.commandcode/skills/\"$name\"; done && echo \"---linked---\" && ls -la ~/.commandcode/skills/)",
+      "Shell(SP=~/.claude/plugins/cache/claude-plugins-official/superpowers/6.2.0; ls \"$SP/skills/using-superpowers/references/\" 2>/dev/null; echo \"---hooks---\"; find \"$SP/hooks\" -type f | head -20; echo \"---claude-specific refs---\"; grep -rl \"claude\" \"$SP/skills\" --include=\"*.md\" | head -20)",
+      "config",
+      "Shell(npx tsc --noEmit 2 >& 1)",
+      "Shell(npx electron-vite build 2 >& 1)",
+      "Shell(npx playwright test tests/e2e/editor.spec.ts -g selected box is deleted 2 >& 1)",
+      "Shell(npx playwright test tests/e2e/editor.spec.ts 2 >& 1)",
+      "Shell(git add src/ tests/ && git commit -F - <<'EOF' feat: add Delete-key support for box and editable annotations Click a box, arrow, or text annotation to select it — handles persist after the pointer leaves. Press Delete or Backspace to remove the selected annotation, undoable via Cmd+Z. Selection clears on tool switch, undo/redo, and empty-canvas click. The click-to-select and click-vs-drag distinction uses a drag threshold so a click never accidentally moves the annotation before deleting it. Co-authored-by: CommandCodeBot <noreply@commandcode.ai> EOF)",
+      "Shell(git commit -F - <<'EOF' chore: add commandcode project config and taste preferences Co-authored-by: CommandCodeBot <noreply@commandcode.ai> EOF)",
+      "Shell(git commit --amend -F - <<'EOF' chore: add commandcode project config and taste preferences Co-authored-by: CommandCodeBot <noreply@commandcode.ai> EOF)",
+      "Shell(git add .commandcode/settings.json && git commit -F - <<'EOF' chore: update commandcode permission allowances Co-authored-by: CommandCodeBot <noreply@commandcode.ai> EOF)",
+      "Shell(npx vitest run --reporter verbose 2 >& 1)",
+      "Shell(npm:*)"
+    ],
+    "deny": [],
+    "defaultMode": "default"
+  }
+}

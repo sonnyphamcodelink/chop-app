@@ -5,15 +5,28 @@
     <title>Chop capture</title>
     <style>
       :root {
-        --accent: #ffd400;
-        /* Guide dashes: 12px of line, 9px of gap, 2px thick. */
-        --dash: 12px;
-        --gap: 21px;
-        --guide: 2px;
-        /* A reticle in the guide colour: four heavy arms with a small gap at
-           the centre, so the pixel under the hotspot is never hidden. The black
-           outer stroke is what keeps yellow readable on pale content. */
-        --cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32'%3E%3Cg fill='none' stroke-linecap='butt'%3E%3Cpath d='M16 1V13M16 19V31M1 16H13M19 16H31' stroke='%23000' stroke-opacity='.75' stroke-width='5.5'/%3E%3Cpath d='M16 1V13M16 19V31M1 16H13M19 16H31' stroke='%23ffd400' stroke-width='3'/%3E%3C/g%3E%3C/svg%3E") 16 16, crosshair;
+        --accent: #f5a000;
+        /* main.ts installs the shared guide metrics and region reticle. */
+        --guide: 1px;
+        --arm-length: 51px;
+        --arm-gap: 20px;
+        --arm-weight: 4px;
+        --dash: 20px;
+        --period: 28px;
+        --cursor: crosshair;
+        --guide-shadow: drop-shadow(0 0 1.5px rgba(0, 0, 0, 0.9));
+        /* Sparse dashes for the candidate-window frame. A gradient rather than
+           a dashed border, so dash and gap lengths are ours to set. */
+        --dash-h: repeating-linear-gradient(
+          to right,
+          var(--accent) 0 var(--dash),
+          transparent var(--dash) var(--period)
+        );
+        --dash-v: repeating-linear-gradient(
+          to bottom,
+          var(--accent) 0 var(--dash),
+          transparent var(--dash) var(--period)
+        );
       }
       html, body {
         margin: 0;
@@ -43,38 +56,75 @@
         outline: 2px solid var(--accent);
         pointer-events: none;
       }
-      /* A window under the cursor is only a candidate, so its border stays dashed. */
+      /* A window under the cursor is only a candidate, so its frame is a
+         sparsely dashed hairline: the guide colour and weight, never the solid
+         outline a committed selection gets. */
       #cutout.window {
-        outline-width: 3px;
-        outline-style: dashed;
+        outline: none;
       }
-      /* Dashed guides that track the pointer, Snagit style. A gradient rather
-         than a dashed border, so dash and gap lengths are ours to set. */
+      #cutout.window::after {
+        content: '';
+        position: absolute;
+        inset: calc(var(--guide) * -1);
+        background:
+          var(--dash-h) left top / 100% var(--guide) repeat-x,
+          var(--dash-h) left bottom / 100% var(--guide) repeat-x,
+          var(--dash-v) left top / var(--guide) 100% repeat-y,
+          var(--dash-v) right top / var(--guide) 100% repeat-y;
+        filter: var(--guide-shadow);
+      }
+      /* Solid guides that track the pointer, Snagit style. */
       .crosshair {
         position: fixed;
         display: none;
         pointer-events: none;
-        filter: drop-shadow(0 0 1.5px rgba(0, 0, 0, 0.9));
+        filter: var(--guide-shadow);
       }
       #cross-x {
         left: 0;
         width: 100vw;
         height: var(--guide);
-        background: repeating-linear-gradient(
-          to right,
-          var(--accent) 0 var(--dash),
-          transparent var(--dash) var(--gap)
-        );
+        background: var(--accent);
       }
       #cross-y {
         top: 0;
         width: var(--guide);
         height: 100vh;
-        background: repeating-linear-gradient(
-          to bottom,
-          var(--accent) 0 var(--dash),
-          transparent var(--dash) var(--gap)
-        );
+        background: var(--accent);
+      }
+      /* Four heavier arms sit just off the pointer — the emphasis a hairline
+         guide cannot carry. They live here rather than in the cursor image
+         because Chromium drops cursors wider than 128px. */
+      #reticle {
+        width: 0;
+        height: 0;
+      }
+      #reticle span {
+        position: absolute;
+        background: var(--accent);
+        border-radius: calc(var(--arm-weight) / 2);
+      }
+      #reticle .vertical {
+        width: var(--arm-weight);
+        height: var(--arm-length);
+        left: calc(var(--arm-weight) / -2);
+      }
+      #reticle .horizontal {
+        width: var(--arm-length);
+        height: var(--arm-weight);
+        top: calc(var(--arm-weight) / -2);
+      }
+      #reticle .up {
+        bottom: var(--arm-gap);
+      }
+      #reticle .down {
+        top: var(--arm-gap);
+      }
+      #reticle .left {
+        right: var(--arm-gap);
+      }
+      #reticle .right {
+        left: var(--arm-gap);
       }
       #label {
         position: fixed;
@@ -112,6 +162,12 @@
     <div id="label"></div>
     <div id="cross-x" class="crosshair"></div>
     <div id="cross-y" class="crosshair"></div>
+    <div id="reticle" class="crosshair">
+      <span class="vertical up"></span>
+      <span class="vertical down"></span>
+      <span class="horizontal left"></span>
+      <span class="horizontal right"></span>
+    </div>
     <div id="hint">Click a window · Drag a region · Esc to cancel</div>
     <div id="input-layer"></div>
     <script type="module" src="./main.ts"></script>

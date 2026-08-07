@@ -241,7 +241,10 @@ export function renderDocument(
   createCanvas: CanvasFactory,
 ): void {
   ctx.save()
-  if (doc.cropRect) ctx.translate(-doc.cropRect.x, -doc.cropRect.y)
+  // Whole pixels only. A fractional offset puts the screenshot between pixels,
+  // and the interpolation that follows blurs every glyph in it. Documents saved
+  // before crops were snapped can still carry a fractional rect.
+  if (doc.cropRect) ctx.translate(-Math.round(doc.cropRect.x), -Math.round(doc.cropRect.y))
 
   ctx.drawImage(image, 0, 0, doc.width, doc.height)
   for (const annotation of doc.annotations) {

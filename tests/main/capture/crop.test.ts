@@ -3,6 +3,12 @@ import { describe, expect, it, vi } from 'vitest'
 const cropped = { width: 400, height: 200 }
 const cropRects: { x: number; y: number; width: number; height: number }[] = []
 
+/** Frame size per fixture data URL: the crop now derives its scale from this. */
+const FRAME_SIZES: Record<string, { width: number; height: number }> = {
+  'data:full': { width: 3024, height: 1964 },
+  'data:external': { width: 1920, height: 1080 },
+}
+
 vi.mock('electron', () => ({
   nativeImage: {
     createFromDataURL: (url: string) => ({
@@ -14,7 +20,7 @@ vi.mock('electron', () => ({
           toDataURL: () => 'data:cropped',
         }
       },
-      getSize: () => ({ width: 3024, height: 1964 }),
+      getSize: () => FRAME_SIZES[url] ?? { width: 3024, height: 1964 },
     }),
   },
 }))
@@ -46,7 +52,7 @@ describe('cropCapture', () => {
     cropRects.length = 0
     const externalCapture = {
       display: { id: 2, bounds: { x: -1920, y: 0, width: 1920, height: 1080 }, scaleFactor: 1 },
-      dataUrl: 'data:full',
+      dataUrl: 'data:external',
     }
     const result = cropCapture(externalCapture, {
       displayId: 2,

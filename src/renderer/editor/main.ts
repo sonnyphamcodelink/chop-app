@@ -1,14 +1,17 @@
 import { calloutTextWidth, readableTextColor, withCalloutText } from '@shared/callout'
 import { AUTOSAVE_DEBOUNCE_MS, CALLOUT_LINE_HEIGHT_RATIO } from '@shared/constants'
 import { debounce } from '@shared/debounce'
+import type {
+  CalloutAnnotation,
+  CaptureDocument,
+  TextAnnotation,
+} from '@shared/document'
 import {
   addAnnotation,
-  type Annotation,
-  type CalloutAnnotation,
-  type CaptureDocument,
   createDocument,
   parseDocument,
   removeAnnotation,
+  updateAnnotation,
 } from '@shared/document'
 import type { Point } from '@shared/geometry'
 import {
@@ -22,6 +25,7 @@ import {
   previewDocument,
   redoState,
   setEditingCallout,
+  setSelectedAnnotation,
   setStyle,
   setTool,
   undoState,
@@ -30,7 +34,8 @@ import type { CaptureResult } from '@shared/ipc'
 import type { ToolId } from '@shared/tools'
 import { createCalloutInput, type CalloutInputGeometry } from './callout-input'
 import { browserCanvasFactory, createCanvasView, textMeasurer } from './canvas-view'
-import { createFilmstrip, type FilmstripEntry } from './filmstrip'
+import { createFilmstrip } from './filmstrip'
+import type { FilmstripEntry } from './filmstrip'
 import { attachInteractions } from './interactions'
 import { createTextInput } from './text-input'
 import { createToolbar } from './toolbar'
@@ -50,7 +55,7 @@ const bridge = (window as unknown as { chopEditor: EditorBridge }).chopEditor
 const canvas = document.querySelector<HTMLCanvasElement>('#canvas')!
 const stage = document.querySelector<HTMLDivElement>('#stage')!
 const toolbarRoot = document.querySelector<HTMLDivElement>('#toolbar')!
-const textElement = document.querySelector<HTMLInputElement>('#text-input')!
+const textElement = document.querySelector<HTMLTextAreaElement>('#text-input')!
 const calloutElement = document.querySelector<HTMLTextAreaElement>('#callout-input')!
 const empty = document.querySelector<HTMLDivElement>('#empty')!
 const filmstripRoot = document.querySelector<HTMLDivElement>('#filmstrip')!
@@ -86,6 +91,19 @@ function applyTool(tool: ToolId, from: EditorState = state): void {
   store.set(setTool(from, tool))
 }
 
+/** Removes the selected annotation and drops the selection. */
+function deleteSelectedAnnotation(): void {
+  const id = state.selectedAnnotationId
+  if (!id) return
+  cancelCalloutEdit()
+  store.set(
+    setSelectedAnnotation(
+      commitDocument(state, removeAnnotation(currentDocument(state), id)),
+      null,
+    ),
+  )
+}
+
 const toolbar = createToolbar(toolbarRoot, {
   onTool: applyTool,
   onColor: (color) => store.set(setStyle(state, { color })),
@@ -96,10 +114,6 @@ const toolbar = createToolbar(toolbarRoot, {
 })
 
 const textInput = createTextInput(textElement)
-
-function commitAnnotation(annotation: Annotation): void {
-  store.set(commitDocument(state, addAnnotation(currentDocument(state), annotation)))
-}
 
 /** Converts a point in image coordinates to a position inside the stage. */
 function stagePoint(imagePoint: Point): Point {
@@ -116,6 +130,11 @@ const calloutInput = createCalloutInput(calloutElement)
 
 /** The document from before the open note was touched, so undo steps over the whole edit. */
 let calloutEditOrigin: CaptureDocument | null = null
+
+/** Document state before the text input opened, so undo steps over the whole edit. */
+let textEditOrigin: CaptureDocument | null = null
+/** Temporary annotation ID used during live text preview. */
+let tempTextId: string | null = null
 
 /** Where the overlay must sit to line up with the bubble as the canvas draws it. */
 function calloutGeometry(callout: CalloutAnnotation): CalloutInputGeometry {
@@ -138,9 +157,9 @@ function calloutById(doc: CaptureDocument, id: string): CalloutAnnotation | null
 
 /** The document as it would be with `text` on the callout being edited. */
 function documentWithNote(origin: CaptureDocument, id: string, text: string): CaptureDocument {
-  const callout = calloutById(origin, id)
-  if (!callout) return origin
-  return withCalloutText(origin, id, text, textMeasurer(callout.fontSize))
+  if (!calloutById(origin, id)) return origin
+  // The measurer is passed per font size: the note is re-sized to its bubble.
+  return withCalloutText(origin, id, text, textMeasurer)
 }
 
 function startCalloutEdit(callout: CalloutAnnotation): void {
@@ -179,10 +198,22 @@ function finishCalloutEdit(text: string): void {
   store.set(setEditingCallout(commitPreview(previewDocument(state, edited), origin), null))
 }
 
-/** Closes the overlay without touching the document, for when the document is replaced. */
-function discardCalloutEditor(): void {
+/** Closes both overlays without touching the document, for when the document is replaced. */
+function discardEditors(): void {
   calloutInput.close()
   calloutEditOrigin = null
+  textInput.close()
+  textEditOrigin = null
+  tempTextId = null
+}
+
+/** Discards the live text preview, leaving the document as it was. */
+function discardTextEditor(): void {
+  const origin = textEditOrigin
+  textEditOrigin = null
+  tempTextId = null
+  textInput.close()
+  if (origin) store.set(cancelPreview(state, origin))
 }
 
 /** Drops the note being typed, leaving the callout as it was. */
@@ -194,23 +225,59 @@ function cancelCalloutEdit(): void {
 }
 
 attachInteractions(canvas, view, store, {
-  onCanvasPress: () => calloutInput.commit(),
+  onCanvasPress: () => {
+    calloutInput.commit()
+    if (textInput.isOpen) textInput.commit()
+  },
 
   onTextPoint: (event, imagePoint) => {
     const stageRect = stage.getBoundingClientRect()
+    const origin = currentDocument(state)
+    const id = crypto.randomUUID()
+    textEditOrigin = origin
+    tempTextId = id
+
     textInput.open({
       at: { x: event.clientX - stageRect.left, y: event.clientY - stageRect.top },
       style: state.style,
       scale: view.scale(),
-      onCommit: (text) =>
-        commitAnnotation({
-          id: crypto.randomUUID(),
+      onInput: (text) => {
+        const doc = currentDocument(state)
+        const existing = doc.annotations.find((a) => a.id === id)
+        const annotation: TextAnnotation = {
+          id,
           kind: 'text',
           at: imagePoint,
           text,
           color: state.style.color,
           fontSize: state.style.fontSize,
-        }),
+        }
+        const updated = existing
+          ? updateAnnotation(doc, id, () => annotation)
+          : addAnnotation(doc, annotation)
+        store.set(previewDocument(state, updated))
+      },
+      onCommit: (text) => {
+        const finalAnnotation: TextAnnotation = {
+          id,
+          kind: 'text',
+          at: imagePoint,
+          text,
+          color: state.style.color,
+          fontSize: state.style.fontSize,
+        }
+        const doc = currentDocument(state)
+        const existing = doc.annotations.find((a) => a.id === id)
+        const updated = existing
+          ? updateAnnotation(doc, id, () => finalAnnotation)
+          : addAnnotation(doc, finalAnnotation)
+        store.set(
+          commitPreview(previewDocument(state, updated), textEditOrigin!),
+        )
+        textEditOrigin = null
+        tempTextId = null
+      },
+      onCancel: () => discardTextEditor(),
     })
   },
 
@@ -276,8 +343,9 @@ function cancelCrop(): void {
   applyTool(lastNonCropTool)
 }
 
+/** True for the Crop tool's frame only: a trim applies itself on mouse release. */
 function isCropping(): boolean {
-  return state.tool === 'crop' && !!state.cropSession
+  return state.cropSession?.mode === 'reframe'
 }
 
 const filmstrip = createFilmstrip(
@@ -298,7 +366,7 @@ function showCanvas(): void {
 function clearEditor(): void {
   // Drop any pending autosave, or the deleted capture would be written back.
   autosave.cancel()
-  discardCalloutEditor()
+  discardEditors()
   loaded = false
   imageElement = null
   canvas.style.display = 'none'
@@ -306,6 +374,13 @@ function clearEditor(): void {
   state = createEditorState(createDocument('empty', 0, 0))
   filmstrip.setActive(null)
   draw()
+}
+
+/** Opens the most recent capture so the editor has context on first load. */
+async function openLastCapture(): Promise<void> {
+  const captures = (await bridge.listCaptures()) as readonly FilmstripEntry[]
+  const first = captures[0]
+  if (first) void openCapture(first.id)
 }
 
 /** Deletes a capture outright — the filmstrip is the only undo. */
@@ -331,7 +406,7 @@ async function openCapture(id: string): Promise<void> {
     imageElement = image
     view.setImage(image)
     showCanvas()
-    discardCalloutEditor()
+    discardEditors()
     const doc = capture.documentJson
       ? parseDocument(capture.documentJson)
       : createDocument(capture.id, capture.width, capture.height, capture.scaleFactor)
@@ -348,7 +423,7 @@ bridge.onCapture((capture) => {
     imageElement = image
     view.setImage(image)
     showCanvas()
-    discardCalloutEditor()
+    discardEditors()
     store.set(createEditorState(createDocument(capture.id, capture.width, capture.height, capture.scaleFactor)))
     filmstrip.setActive(capture.id)
     // Wait for disk — refreshing earlier races the save and drops this capture from history.
@@ -357,7 +432,9 @@ bridge.onCapture((capture) => {
   image.src = capture.dataUrl
 })
 
-void filmstrip.refresh()
+void filmstrip.refresh().then(() => {
+  if (!loaded) void openLastCapture()
+})
 // Paints the starting tool and colour before the first capture arrives.
 draw()
 
@@ -390,6 +467,11 @@ document.addEventListener('keydown', (event) => {
     commitPendingCrop()
     const dataUrl = flattenToDataUrl()
     if (dataUrl) void bridge.saveAs(dataUrl)
+    return
+  }
+  if (!meta && (event.key === 'Delete' || event.key === 'Backspace')) {
+    event.preventDefault()
+    deleteSelectedAnnotation()
     return
   }
   if (!meta) {

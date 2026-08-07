@@ -1,38 +1,42 @@
+import { refitCallout } from '@shared/callout'
 import { CALLOUT_DRAG_THRESHOLD } from '@shared/constants'
-import { constrainCropRect, fullImageRect, moveCropRect } from '@shared/crop-session'
+import { constrainCropRect, cropBounds, moveCropRect } from '@shared/crop-session'
+import { canvasCursor, type CursorHit, RETICLE_CURSOR } from '@shared/cursor'
 import {
   addAnnotation,
   type CalloutAnnotation,
   type CaptureDocument,
+  outputSize,
   updateAnnotation,
 } from '@shared/document'
 import {
+  beginTrim,
+  commitCrop,
   commitDocument,
   commitPreview,
   currentDocument,
   type EditorState,
   previewDocument,
-  setCropSession,
+  setCropRect,
   setDraft,
-  setHoveredCallout,
+  setHoveredAnnotation,
+  setSelectedAnnotation,
 } from '@shared/editor-state'
 import { type Point, rectContains } from '@shared/geometry'
 import {
+  type AnnotationHandleId,
+  type CalloutHit,
   calloutHitAtPoint,
+  type EditableAnnotation,
+  editableHitAtPoint,
   type HandleId,
   handleAtPoint,
   moveAnnotation,
+  resizeAnnotation,
   resizeRect,
 } from '@shared/hit-test'
-import {
-  beginDraft,
-  calloutRect,
-  createCallout,
-  draftToAnnotation,
-  isDrawingTool,
-  updateDraft,
-} from '@shared/tools'
-import type { CanvasView } from './canvas-view'
+import { beginDraft, draftToAnnotation, isDrawingTool, updateDraft } from '@shared/tools'
+import { type CanvasView, textMeasurer } from './canvas-view'
 
 export type Store = {
   get(): EditorState
@@ -55,10 +59,35 @@ type Gesture =
   | { readonly mode: 'draw' }
   | { readonly mode: 'crop-resize'; readonly handle: HandleId }
   | { readonly mode: 'crop-move'; readonly last: Point }
+  /** The same frame drag outside the Crop tool, applied when the mouse comes up. */
+  | { readonly mode: 'crop-trim'; readonly handle: HandleId }
   | {
       readonly mode: 'callout-move'
       readonly callout: CalloutAnnotation
       /** The document before the drag, so undo steps over the whole move. */
+      readonly origin: CaptureDocument
+      readonly last: Point
+      /** Until the pointer travels far enough, this is still a click. */
+      readonly moved: boolean
+    }
+  | {
+      readonly mode: 'callout-resize'
+      readonly callout: CalloutAnnotation
+      readonly handle: HandleId
+      readonly origin: CaptureDocument
+    }
+  | {
+      readonly mode: 'annotation-move'
+      readonly annotation: EditableAnnotation
+      readonly origin: CaptureDocument
+      readonly last: Point
+      /** Until the pointer travels far enough, this is still a click. */
+      readonly moved: boolean
+    }
+  | {
+      readonly mode: 'annotation-resize'
+      readonly annotation: EditableAnnotation
+      readonly handle: AnnotationHandleId
       readonly origin: CaptureDocument
       readonly last: Point
       /** Until the pointer travels far enough, this is still a click. */
@@ -69,6 +98,18 @@ function newId(): string {
   return crypto.randomUUID()
 }
 
+/** The pointer a callout's parts ask for: delete, resize, move. */
+function calloutCursor(hit: CalloutHit): CursorHit {
+  switch (hit.part) {
+    case 'badge':
+      return { kind: 'pointer' }
+    case 'handle':
+      return { kind: 'resize', cursor: cursorForHandle(hit.handle) }
+    case 'body':
+      return { kind: 'move' }
+  }
+}
+
 export function attachInteractions(
   canvas: HTMLCanvasElement,
   view: CanvasView,
@@ -77,9 +118,19 @@ export function attachInteractions(
 ): void {
   let gesture: Gesture | null = null
 
-  /** Callouts are inert while a crop frame is being set. */
-  function calloutsInteractive(state: EditorState): boolean {
-    return !(state.tool === 'crop' && state.cropSession)
+  /** Callouts and placed shapes are inert while the Crop tool's frame is being set. */
+  function shapesInteractive(state: EditorState): boolean {
+    return state.cropSession?.mode !== 'reframe'
+  }
+
+  /**
+   * The trim handle under the pointer. Every tool but Crop carries these on the
+   * edges of the view, so a capture can be cut down without leaving the tool.
+   */
+  function trimHandleAt(state: EditorState, point: Point): HandleId | null {
+    if (state.tool === 'crop' || state.cropSession) return null
+    const rect = cropBounds(currentDocument(state), 'trim')
+    return handleAtPoint(rect, point, view.scale())
   }
 
   canvas.addEventListener('mousedown', (event) => {
@@ -89,26 +140,97 @@ export function attachInteractions(
     const state = store.get()
     const point = view.toImagePoint(event, state)
 
-    if (calloutsInteractive(state)) {
-      // Callouts answer to the pointer whatever tool is selected: the badge
-      // deletes, and the bubble either moves or opens for typing.
-      const hit = calloutHitAtPoint(currentDocument(state), point, view.scale())
-      if (hit?.part === 'badge') {
+    if (shapesInteractive(state)) {
+      // Callouts answer first: badge deletes, bubble moves or opens for typing.
+      const calloutHit = calloutHitAtPoint(currentDocument(state), point, view.scale())
+      if (calloutHit?.part === 'badge') {
         event.preventDefault()
-        handlers.onCalloutDelete(hit.callout)
+        handlers.onCalloutDelete(calloutHit.callout)
         return
       }
-      if (hit) {
+      if (calloutHit) {
         event.preventDefault()
+        const origin = currentDocument(state)
+        if (calloutHit.part === 'handle') {
+          canvas.style.cursor = canvasCursor({
+            kind: 'resize',
+            cursor: cursorForHandle(calloutHit.handle),
+          })
+          gesture = {
+            mode: 'callout-resize',
+            callout: calloutHit.callout,
+            handle: calloutHit.handle,
+            origin,
+          }
+          return
+        }
+        canvas.style.cursor = canvasCursor({ kind: 'move' })
         gesture = {
           mode: 'callout-move',
-          callout: hit.callout,
-          origin: currentDocument(state),
+          callout: calloutHit.callout,
+          origin,
           last: point,
           moved: false,
         }
         return
       }
+
+      // Boxes, arrows, and text: grab in any tool, same as callouts.
+      const editHit = editableHitAtPoint(currentDocument(state), point, view.scale())
+      if (editHit) {
+        event.preventDefault()
+        const origin = currentDocument(state)
+        store.set(setSelectedAnnotation(state, editHit.annotation.id))
+        canvas.style.cursor = canvasCursor(
+          editHit.handle
+            ? { kind: 'resize', cursor: cursorForHandle(editHit.handle) }
+            : { kind: 'move' },
+        )
+        gesture = editHit.handle
+          ? {
+              mode: 'annotation-resize',
+              annotation: editHit.annotation,
+              handle: editHit.handle,
+              origin,
+              last: point,
+              moved: false,
+            }
+          : {
+              mode: 'annotation-move',
+              annotation: editHit.annotation,
+              origin,
+              last: point,
+              moved: false,
+            }
+        return
+      }
+
+      // Pressing empty canvas drops the selection.
+      store.set(setSelectedAnnotation(state, null))
+    }
+
+    if (state.cropSession?.mode === 'reframe') {
+      const { rect } = state.cropSession
+      const handle = handleAtPoint(rect, point, view.scale())
+      if (handle) {
+        canvas.style.cursor = canvasCursor({ kind: 'resize', cursor: cursorForHandle(handle) })
+        gesture = { mode: 'crop-resize', handle }
+      } else if (rectContains(rect, point)) {
+        canvas.style.cursor = canvasCursor({ kind: 'move' })
+        gesture = { mode: 'crop-move', last: point }
+      }
+      return
+    }
+
+    // Trimming wins over the tool's own drag: these handles are only on the edges,
+    // where a drawing drag has nowhere to go anyway.
+    const trimHandle = trimHandleAt(state, point)
+    if (trimHandle) {
+      event.preventDefault()
+      canvas.style.cursor = canvasCursor({ kind: 'resize', cursor: cursorForHandle(trimHandle) })
+      gesture = { mode: 'crop-trim', handle: trimHandle }
+      store.set(beginTrim(state, cropBounds(currentDocument(state), 'trim')))
+      return
     }
 
     if (state.tool === 'text') {
@@ -117,18 +239,9 @@ export function attachInteractions(
       handlers.onTextPoint(event, point)
       return
     }
-    if (state.tool === 'crop' && state.cropSession) {
-      const { rect } = state.cropSession
-      const handle = handleAtPoint(rect, point, view.scale())
-      if (handle) {
-        gesture = { mode: 'crop-resize', handle }
-      } else if (rectContains(rect, point)) {
-        gesture = { mode: 'crop-move', last: point }
-      }
-      return
-    }
     if (isDrawingTool(state.tool)) {
       gesture = { mode: 'draw' }
+      canvas.style.cursor = RETICLE_CURSOR
       store.set(setDraft(state, beginDraft(state.tool, point)))
     }
   })
@@ -143,6 +256,7 @@ export function attachInteractions(
     }
 
     if (gesture.mode === 'draw') {
+      canvas.style.cursor = RETICLE_CURSOR
       if (state.draft) store.set(setDraft(state, updateDraft(state.draft, point)))
       return
     }
@@ -165,30 +279,130 @@ export function attachInteractions(
       return
     }
 
-    if (!state.cropSession) return
-    const bounds = fullImageRect(currentDocument(state))
+    if (gesture.mode === 'callout-resize') {
+      const { callout: target, handle } = gesture
+      store.set(
+        previewDocument(
+          state,
+          updateAnnotation(currentDocument(state), target.id, (annotation) =>
+            annotation.kind === 'callout'
+              ? // Text is sized by the bubble, so it refits on every frame.
+                refitCallout(
+                  { ...annotation, rect: resizeRect(annotation.rect, handle, point) },
+                  textMeasurer,
+                )
+              : annotation,
+          ),
+        ),
+      )
+      return
+    }
 
-    if (gesture.mode === 'crop-resize') {
-      const resized = resizeRect(state.cropSession.rect, gesture.handle, point)
-      store.set(setCropSession(state, constrainCropRect(resized, bounds)))
+    if (gesture.mode === 'annotation-move') {
+      const dx = point.x - gesture.last.x
+      const dy = point.y - gesture.last.y
+      const moved = gesture.moved || Math.hypot(dx, dy) * view.scale() > CALLOUT_DRAG_THRESHOLD
+      if (!moved) return
+      store.set(
+        previewDocument(
+          state,
+          updateAnnotation(currentDocument(state), gesture.annotation.id, (annotation) =>
+            moveAnnotation(annotation, dx, dy),
+          ),
+        ),
+      )
+      gesture = { ...gesture, last: point, moved: true }
+      return
+    }
+
+    if (gesture.mode === 'annotation-resize') {
+      const { annotation: target, handle, last } = gesture
+      const moved =
+        gesture.moved || Math.hypot(point.x - last.x, point.y - last.y) * view.scale() > CALLOUT_DRAG_THRESHOLD
+      if (!moved) return
+      store.set(
+        previewDocument(
+          state,
+          updateAnnotation(currentDocument(state), target.id, (annotation) => {
+            if (
+              annotation.kind !== 'box' &&
+              annotation.kind !== 'arrow' &&
+              annotation.kind !== 'text'
+            ) {
+              return annotation
+            }
+            return resizeAnnotation(annotation, handle, point)
+          }),
+        ),
+      )
+      gesture = { ...gesture, last: point, moved: true }
+      return
+    }
+
+    const session = state.cropSession
+    if (!session) return
+    const bounds = cropBounds(currentDocument(state), session.mode)
+
+    if (gesture.mode === 'crop-resize' || gesture.mode === 'crop-trim') {
+      const resized = resizeRect(session.rect, gesture.handle, point)
+      store.set(setCropRect(state, constrainCropRect(resized, bounds)))
       return
     }
 
     if (gesture.mode === 'crop-move') {
       const dx = point.x - gesture.last.x
       const dy = point.y - gesture.last.y
-      store.set(setCropSession(state, moveCropRect(state.cropSession.rect, dx, dy, bounds)))
+      store.set(setCropRect(state, moveCropRect(session.rect, dx, dy, bounds)))
       gesture = { ...gesture, last: point }
     }
   })
 
-  /** Shows the delete badge, and the cursor, for whatever is under the pointer. */
+  /** Shows handles / the delete badge, and the cursor, for whatever is under the pointer. */
   function updateHover(state: EditorState, point: Point): void {
-    const hit = calloutsInteractive(state)
-      ? calloutHitAtPoint(currentDocument(state), point, view.scale())
-      : null
-    canvas.style.cursor = hit ? (hit.part === 'badge' ? 'pointer' : 'move') : ''
-    store.set(setHoveredCallout(state, hit?.callout.id ?? null))
+    if (state.cropSession?.mode === 'reframe') {
+      const { rect } = state.cropSession
+      const handle = handleAtPoint(rect, point, view.scale())
+      canvas.style.cursor = canvasCursor(
+        handle
+          ? { kind: 'resize', cursor: cursorForHandle(handle) }
+          : rectContains(rect, point)
+            ? { kind: 'move' }
+            : { kind: 'none' },
+      )
+      store.set(setHoveredAnnotation(state, null))
+      return
+    }
+
+    const calloutHit = calloutHitAtPoint(currentDocument(state), point, view.scale())
+    if (calloutHit) {
+      canvas.style.cursor = canvasCursor(calloutCursor(calloutHit))
+      store.set(setHoveredAnnotation(state, calloutHit.callout.id))
+      return
+    }
+
+    const editHit = editableHitAtPoint(currentDocument(state), point, view.scale())
+    if (editHit) {
+      canvas.style.cursor = canvasCursor(
+        editHit.handle
+          ? { kind: 'resize', cursor: cursorForHandle(editHit.handle) }
+          : { kind: 'move' },
+      )
+      store.set(setHoveredAnnotation(state, editHit.annotation.id))
+      return
+    }
+
+    const trimHandle = trimHandleAt(state, point)
+    if (trimHandle) {
+      canvas.style.cursor = canvasCursor({
+        kind: 'resize',
+        cursor: cursorForHandle(trimHandle),
+      })
+      store.set(setHoveredAnnotation(state, null))
+      return
+    }
+
+    canvas.style.cursor = canvasCursor({ kind: 'none' })
+    store.set(setHoveredAnnotation(state, null))
   }
 
   canvas.addEventListener('mouseup', () => {
@@ -204,26 +418,36 @@ export function attachInteractions(
       return
     }
 
-    // A crop gesture only adjusts the working frame; Enter commits it.
+    if (
+      finished.mode === 'annotation-move' ||
+      finished.mode === 'annotation-resize' ||
+      finished.mode === 'callout-resize'
+    ) {
+      // A click on an annotation selects it; a drag applies the change. Either
+      // way the preview resolves to the document, but only the drag commits it.
+      if (finished.mode === 'annotation-move' && !finished.moved) return
+      if (finished.mode === 'annotation-resize' && !finished.moved) return
+      store.set(commitPreview(state, finished.origin))
+      return
+    }
+
+    // Letting go is what applies a trim: the view resizes to the frame here.
+    if (finished.mode === 'crop-trim') {
+      store.set(commitCrop(state))
+      return
+    }
+
+    // The Crop tool's own gesture only adjusts the working frame; Enter commits it.
     if (finished.mode !== 'draw') return
 
     if (state.draft) {
-      // A callout lands empty; its note is typed by clicking the bubble after.
-      if (state.draft.tool === 'callout') {
-        const rect = calloutRect(state.draft, state.style)
-        store.set(
-          commitDocument(
-            state,
-            addAnnotation(currentDocument(state), createCallout(rect, '', state.style, newId())),
-          ),
-        )
-        return
-      }
-
-      const annotation = draftToAnnotation(state.draft, state.style, newId())
+      // A drag too small to be a shape leaves nothing behind, callouts included:
+      // a stray click on the capture should not litter it with empty bubbles.
+      const doc = currentDocument(state)
+      const annotation = draftToAnnotation(state.draft, state.style, newId(), outputSize(doc))
       store.set(
         annotation
-          ? commitDocument(state, addAnnotation(currentDocument(state), annotation))
+          ? commitDocument(state, addAnnotation(doc, annotation))
           : setDraft(state, null),
       )
       return
@@ -233,18 +457,61 @@ export function attachInteractions(
   })
 
   canvas.addEventListener('mouseleave', () => {
-    store.set(setHoveredCallout(store.get(), null))
+    store.set(setHoveredAnnotation(store.get(), null))
+    canvas.style.cursor = canvasCursor({ kind: 'none' })
     if (!gesture) return
     const abandoned = gesture
     gesture = null
 
-    // Leaving mid-move keeps the bubble where it got to, as one history entry.
-    if (abandoned.mode === 'callout-move') {
-      if (abandoned.moved) store.set(commitPreview(store.get(), abandoned.origin))
+    // Leaving mid-move keeps the shape where it got to, as one history entry.
+    if (
+      abandoned.mode === 'callout-move' ||
+      abandoned.mode === 'annotation-move' ||
+      abandoned.mode === 'annotation-resize'
+    ) {
+      if (
+        (abandoned.mode === 'callout-move' ||
+          abandoned.mode === 'annotation-move' ||
+          abandoned.mode === 'annotation-resize') &&
+        !abandoned.moved
+      ) {
+        return
+      }
+      store.set(commitPreview(store.get(), abandoned.origin))
       return
     }
+
+    // The mouseup that would apply a trim lands outside the canvas, so apply it
+    // here instead — otherwise the frame is left dimming a view nothing can end.
+    if (abandoned.mode === 'crop-trim') {
+      store.set(commitCrop(store.get()))
+      return
+    }
+
     // Leaving the canvas ends the drag but keeps the frame the user dragged out.
     if (abandoned.mode !== 'draw') return
     store.set(setDraft(store.get(), null))
   })
+
+  canvas.style.cursor = RETICLE_CURSOR
+}
+
+function cursorForHandle(handle: AnnotationHandleId): string {
+  switch (handle) {
+    case 'n':
+    case 's':
+      return 'ns-resize'
+    case 'e':
+    case 'w':
+      return 'ew-resize'
+    case 'nw':
+    case 'se':
+      return 'nwse-resize'
+    case 'ne':
+    case 'sw':
+      return 'nesw-resize'
+    case 'from':
+    case 'to':
+      return 'pointer'
+  }
 }

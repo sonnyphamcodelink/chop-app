@@ -16,3 +16,12 @@ These exercise platform code that cannot run in CI.
 ## Permissions (macOS)
 - [ ] With Screen Recording denied, capture shows guidance and opens System Settings
 - [ ] After granting and relaunching, capture works
+
+## Updates
+The dialog and the network call need a packaged build; `npm run dev` never checks.
+- [ ] Tray shows the running version, greyed out, above "Check for Updates…"
+- [ ] With no newer release, "Check for Updates…" reports Chop is up to date
+- [ ] With a newer release published, launching the app offers it unprompted
+- [ ] "Download" opens the release page in the browser; "Later" dismisses it
+- [ ] Offline, "Check for Updates…" reports the failure instead of hanging or crashing
+- [ ] Before the first release exists, the check reports "No release has been published yet."

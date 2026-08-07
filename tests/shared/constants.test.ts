@@ -43,9 +43,8 @@ describe('constants', () => {
     expect([...widths].sort((a, b) => a - b)).toEqual(widths)
   })
 
-  it('defaults the stroke width to the bold end of the offered weights', () => {
-    expect(DEFAULT_STROKE_WIDTH).toBe(STROKE_WIDTHS.thick)
-    expect(DEFAULT_STROKE_WIDTH / STROKE_WIDTH_MAX).toBeGreaterThanOrEqual(0.75)
+  it('defaults the stroke width to the middle offered weight', () => {
+    expect(DEFAULT_STROKE_WIDTH).toBe(STROKE_WIDTHS.medium)
   })
 
   it('gives a resize handle a grab area larger than it is drawn', () => {
