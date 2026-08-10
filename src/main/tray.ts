@@ -7,13 +7,15 @@ import {
   Tray,
 } from 'electron'
 import { join } from 'node:path'
-import { captureAccelerator } from './hotkey-accelerator'
 import type { LoginItemState } from './login-item-state'
 
 export type TrayHandlers = {
   onCapture(): void
   onOpenEditor(): void
+  onOpenSettings(): void
   onCheckForUpdates(): void
+  /** Capture accelerator, read fresh each time the menu is built. */
+  captureShortcut(): string
   /** Current login item state, read fresh each time the menu is built. */
   openAtLogin(): LoginItemState
   onToggleOpenAtLogin(enabled: boolean): void
@@ -55,13 +57,14 @@ function openAtLoginItems(
 
 function buildMenu(handlers: TrayHandlers, refresh: () => void): Menu {
   return Menu.buildFromTemplate([
-    { label: 'Capture', accelerator: captureAccelerator(), click: handlers.onCapture },
+    { label: 'Capture', accelerator: handlers.captureShortcut(), click: handlers.onCapture },
     { label: 'Open Editor', click: handlers.onOpenEditor },
     { type: 'separator' },
     {
       label: 'Open Captures Folder',
       click: () => void shell.openPath(handlers.captureRoot()),
     },
+    { label: 'Settings…', click: handlers.onOpenSettings },
     { type: 'separator' },
     ...openAtLoginItems(handlers, refresh),
     { label: `Version ${app.getVersion()}`, enabled: false },
@@ -71,7 +74,13 @@ function buildMenu(handlers: TrayHandlers, refresh: () => void): Menu {
   ])
 }
 
-export function createTray(handlers: TrayHandlers): Tray {
+export type TrayController = {
+  readonly tray: Tray
+  /** Redraws the menu, for changes made outside it such as a new shortcut. */
+  refresh(): void
+}
+
+export function createTray(handlers: TrayHandlers): TrayController {
   const icon = nativeImage.createFromPath(iconPath())
   // A template image adapts to light and dark menu bars on macOS.
   icon.setTemplateImage(true)
@@ -83,5 +92,5 @@ export function createTray(handlers: TrayHandlers): Tray {
   const refresh = (): void => tray.setContextMenu(buildMenu(handlers, refresh))
   refresh()
 
-  return tray
+  return { tray, refresh }
 }

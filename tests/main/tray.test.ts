@@ -5,6 +5,7 @@ type Template = {
   label?: string
   type?: string
   checked?: boolean
+  accelerator?: string
   click?: () => void
 }[]
 
@@ -32,12 +33,16 @@ const { createTray } = await import('../../src/main/tray')
 
 const toggles: boolean[] = []
 let state: LoginItemState = 'disabled'
+let shortcut = 'CommandOrControl+Shift+2'
+let settingsOpened = 0
 
-function build(): void {
-  createTray({
+function build(): { refresh(): void } {
+  return createTray({
     onCapture: () => {},
     onOpenEditor: () => {},
+    onOpenSettings: () => void (settingsOpened += 1),
     onCheckForUpdates: () => {},
+    captureShortcut: () => shortcut,
     openAtLogin: () => state,
     onToggleOpenAtLogin: (enabled) => void toggles.push(enabled),
     captureRoot: () => '/captures',
@@ -51,6 +56,8 @@ beforeEach(() => {
   menus.length = 0
   toggles.length = 0
   state = 'disabled'
+  shortcut = 'CommandOrControl+Shift+2'
+  settingsOpened = 0
 })
 
 describe('createTray', () => {
@@ -113,7 +120,30 @@ describe('createTray', () => {
     expect(labels).toContain('Capture')
     expect(labels).toContain('Open Editor')
     expect(labels).toContain('Open Captures Folder')
+    expect(labels).toContain('Settings…')
     expect(labels).toContain('Check for Updates…')
     expect(labels).toContain('Quit Chop')
+  })
+
+  it('shows the capture shortcut in force', () => {
+    shortcut = 'Control+Alt+K'
+    build()
+    const capture = (menus[0] ?? []).find((entry) => entry.label === 'Capture')
+    expect(capture?.accelerator).toBe('Control+Alt+K')
+  })
+
+  it('picks up a shortcut changed elsewhere when refreshed', () => {
+    const controller = build()
+    shortcut = 'Control+Alt+K'
+    controller.refresh()
+
+    const capture = (menus[1] ?? []).find((entry) => entry.label === 'Capture')
+    expect(capture?.accelerator).toBe('Control+Alt+K')
+  })
+
+  it('opens settings from the menu', () => {
+    build()
+    ;(menus[0] ?? []).find((entry) => entry.label === 'Settings…')?.click?.()
+    expect(settingsOpened).toBe(1)
   })
 })

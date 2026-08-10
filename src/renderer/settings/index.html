@@ -1,0 +1,98 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Chop Settings</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --accent: oklch(0.55 0.19 258);
+        --muted: color-mix(in oklab, currentColor 55%, transparent);
+        --line: color-mix(in oklab, currentColor 18%, transparent);
+        --field: color-mix(in oklab, currentColor 6%, transparent);
+      }
+      html, body {
+        margin: 0;
+        height: 100%;
+        font: 13px -apple-system, system-ui, sans-serif;
+        user-select: none;
+      }
+      body {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        padding: 24px 28px;
+        box-sizing: border-box;
+      }
+      h1 {
+        margin: 0;
+        font-size: 15px;
+        font-weight: 600;
+      }
+      .row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .row label { flex: 0 0 auto; }
+      /* The recorder itself: a field the user clicks, then types into. */
+      #shortcut {
+        flex: 1 1 auto;
+        min-width: 0;
+        padding: 8px 12px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--field);
+        color: inherit;
+        font: 15px -apple-system, system-ui, sans-serif;
+        text-align: center;
+        cursor: pointer;
+      }
+      #shortcut:hover { border-color: color-mix(in oklab, currentColor 35%, transparent); }
+      #shortcut.recording {
+        border-color: var(--accent);
+        box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 25%, transparent);
+        color: var(--muted);
+      }
+      #reset {
+        flex: 0 0 auto;
+        padding: 8px 12px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: transparent;
+        color: inherit;
+        font: 13px -apple-system, system-ui, sans-serif;
+        cursor: pointer;
+      }
+      #reset:hover { background: var(--field); }
+      #status {
+        margin: 0;
+        min-height: 32px;
+        line-height: 1.4;
+        color: var(--muted);
+      }
+      #status.error { color: oklch(0.58 0.19 25); }
+      footer {
+        margin-top: auto;
+        padding-top: 12px;
+        border-top: 1px solid var(--line);
+        color: var(--muted);
+        line-height: 1.4;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Shortcuts</h1>
+    <div class="row">
+      <label for="shortcut">Capture</label>
+      <button id="shortcut" type="button">…</button>
+      <button id="reset" type="button">Restore Default</button>
+    </div>
+    <p id="status">Click the shortcut, then press the keys you want to use.</p>
+    <footer>
+      The capture shortcut works anywhere, so pick a combination other apps are
+      unlikely to want.
+    </footer>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

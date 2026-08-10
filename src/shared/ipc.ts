@@ -25,6 +25,14 @@ export const CHANNELS = {
   deleteCapture: 'chop:delete-capture',
   /** main → editor: trigger a new capture from the tray or a shortcut */
   requestCapture: 'chop:request-capture',
+  /** renderer → main: the capture shortcut as it stands */
+  getShortcut: 'chop:get-shortcut',
+  /** settings → main: ask for a new capture shortcut; resolves with what stuck */
+  setShortcut: 'chop:set-shortcut',
+  /** settings → main: release the hotkey while the recorder is listening */
+  recordShortcut: 'chop:record-shortcut',
+  /** main → all windows: the capture shortcut changed */
+  shortcutChanged: 'chop:shortcut-changed',
 } as const
 
 export type ChannelName = (typeof CHANNELS)[keyof typeof CHANNELS]
@@ -55,6 +63,22 @@ export type CaptureResult = {
   /** Display scale at capture time (1 on non-Retina, 2 on Retina). */
   readonly scaleFactor: number
   readonly createdAt: string
+}
+
+/** The capture shortcut, paired with the spelling shown to the user. */
+export type ShortcutInfo = {
+  /** Electron accelerator, e.g. `CommandOrControl+Shift+2`. */
+  readonly accelerator: string
+  /** Ready to display, e.g. `⇧⌘2`. */
+  readonly display: string
+}
+
+/** Answer to a request to change the shortcut; `shortcut` is what is in force after it. */
+export type ShortcutUpdate = {
+  readonly ok: boolean
+  readonly shortcut: ShortcutInfo
+  /** Why the request was refused, for the settings page to show. */
+  readonly error?: string
 }
 
 /** Sent by the editor whenever the document changes or on close. */
