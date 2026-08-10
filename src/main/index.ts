@@ -5,7 +5,6 @@ import { getEditorWindow, sendCapture } from './editor-window'
 import { captureShortcut, registerHotkeys, unregisterHotkeys } from './hotkeys'
 import { registerEditorHandlers } from './ipc/editor-handlers'
 import { registerSettingsHandlers } from './ipc/settings-handlers'
-import { openAtLoginState, setOpenAtLogin } from './login-item'
 import { readSettings } from './settings-store'
 import { openSettingsWindow } from './settings-window'
 import { defaultCaptureRoot } from './storage/capture-root'
@@ -46,8 +45,6 @@ if (!app.requestSingleInstanceLock()) {
       onOpenSettings: () => openSettingsWindow(),
       onCheckForUpdates: () => void checkForUpdates({ silent: false }),
       captureShortcut,
-      openAtLogin: openAtLoginState,
-      onToggleOpenAtLogin: (enabled) => void setOpenAtLogin(enabled),
       captureRoot: () => captureRoot,
     })
 
