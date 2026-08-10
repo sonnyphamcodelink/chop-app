@@ -17,9 +17,16 @@ These exercise platform code that cannot run in CI.
 - [ ] With Screen Recording denied, capture shows guidance and opens System Settings
 - [ ] After granting and relaunching, capture works
 
+## Settings
+- [ ] Tray "Settings…" opens on the General pane
+- [ ] Open at Login switch reflects the OS state and toggles it
+- [ ] When macOS needs approval, the existing dialog appears; switch stays off until allowed
+- [ ] Tray menu does not list Open at Login
+- [ ] Shortcuts pane still shows and changes the Capture shortcut (see Capture shortcut below)
+
 ## Capture shortcut
 The global hotkey itself only registers with the OS in a running app.
-- [ ] Tray "Settings…" opens the window; the field shows the shortcut in force
+- [ ] Tray "Settings…" → Shortcuts shows the shortcut in force
 - [ ] Recording a new chord captures with it straight away, and the tray label follows
 - [ ] The chosen shortcut survives a relaunch
 - [ ] While recording, pressing the current shortcut records it instead of capturing
