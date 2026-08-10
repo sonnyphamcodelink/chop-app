@@ -33,9 +33,15 @@ export const CHANNELS = {
   recordShortcut: 'chop:record-shortcut',
   /** main → all windows: the capture shortcut changed */
   shortcutChanged: 'chop:shortcut-changed',
+  /** settings → main: whether Chop opens at login */
+  getOpenAtLogin: 'chop:get-open-at-login',
+  /** settings → main: enable/disable open at login; resolves with OS state */
+  setOpenAtLogin: 'chop:set-open-at-login',
 } as const
 
 export type ChannelName = (typeof CHANNELS)[keyof typeof CHANNELS]
+
+export type LoginItemState = 'enabled' | 'disabled' | 'requires-approval' | 'unsupported'
 
 /** Sent to each overlay window as it opens. */
 export type OverlayInit = {

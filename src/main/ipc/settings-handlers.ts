@@ -1,6 +1,7 @@
 import { BrowserWindow, ipcMain } from 'electron'
 import { formatAccelerator } from '@shared/accelerator'
-import { CHANNELS, type ShortcutInfo, type ShortcutUpdate } from '@shared/ipc'
+import { CHANNELS, type LoginItemState, type ShortcutInfo, type ShortcutUpdate } from '@shared/ipc'
+import { openAtLoginState, setOpenAtLogin } from '../login-item'
 import {
   captureShortcut,
   changeCaptureShortcut,
@@ -49,5 +50,12 @@ export function registerSettingsHandlers(onChanged: (shortcut: ShortcutInfo) => 
   ipcMain.on(CHANNELS.recordShortcut, (_event, recording: unknown) => {
     if (recording === true) suspendCaptureShortcut()
     else resumeCaptureShortcut()
+  })
+
+  ipcMain.handle(CHANNELS.getOpenAtLogin, (): LoginItemState => openAtLoginState())
+
+  ipcMain.handle(CHANNELS.setOpenAtLogin, (_event, enabled: unknown): LoginItemState => {
+    if (typeof enabled !== 'boolean') return openAtLoginState()
+    return setOpenAtLogin(enabled)
   })
 }

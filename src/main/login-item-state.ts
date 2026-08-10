@@ -3,7 +3,9 @@
  * can be asserted without pulling `electron` into the test environment.
  */
 
-export type LoginItemState = 'enabled' | 'disabled' | 'requires-approval' | 'unsupported'
+import type { LoginItemState } from '@shared/ipc'
+
+export type { LoginItemState }
 
 /** Structural match for Electron's LoginItemSettings, kept dependency-free. */
 export type LoginItemSettingsLike = {
