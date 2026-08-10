@@ -40,8 +40,9 @@
       .pane { display: none; flex-direction: column; gap: 12px; flex: 1; min-height: 0; }
       .pane.active { display: flex; }
       h1 { margin: 0; font-size: 15px; font-weight: 600; }
+      [hidden] { display: none !important; }
       .row { display: flex; align-items: center; gap: 12px; }
-      .row label { flex: 1; }
+      .row > label:first-of-type { flex: 1; }
       #shortcut {
         flex: 1 1 auto; min-width: 0; padding: 8px 12px;
         border: 1px solid var(--line); border-radius: 8px; background: var(--field);

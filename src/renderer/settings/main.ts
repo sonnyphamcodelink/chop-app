@@ -40,12 +40,15 @@ const loginSwitch = document.querySelector<HTMLInputElement>('#open-at-login')!
 
 function applyLoginState(state: LoginItemState): void {
   if (state === 'unsupported') {
+    loginSwitch.checked = false
+    loginSwitch.disabled = true
     loginRow.hidden = true
     loginNote.hidden = false
     return
   }
   loginRow.hidden = false
   loginNote.hidden = true
+  loginSwitch.disabled = false
   loginSwitch.checked = state === 'enabled'
 }
 
