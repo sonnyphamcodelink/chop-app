@@ -1,5 +1,5 @@
 import { DEFAULT_CAPTURE_SHORTCUT } from '@shared/accelerator'
-import type { ShortcutInfo, ShortcutUpdate } from '@shared/ipc'
+import type { LoginItemState, ShortcutInfo, ShortcutUpdate } from '@shared/ipc'
 import { createRecorder } from './recorder'
 
 type SettingsBridge = {
@@ -7,9 +7,65 @@ type SettingsBridge = {
   getShortcut(): Promise<ShortcutInfo>
   setShortcut(accelerator: string): Promise<ShortcutUpdate>
   setRecording(recording: boolean): void
+  getOpenAtLogin(): Promise<LoginItemState>
+  setOpenAtLogin(enabled: boolean): Promise<LoginItemState>
 }
 
 const bridge = (window as unknown as { chopSettings: SettingsBridge }).chopSettings
+
+const navButtons = document.querySelectorAll<HTMLButtonElement>('nav [data-pane]')
+const panes = {
+  general: document.querySelector<HTMLElement>('#pane-general')!,
+  shortcuts: document.querySelector<HTMLElement>('#pane-shortcuts')!,
+}
+
+function showPane(id: 'general' | 'shortcuts'): void {
+  for (const button of navButtons) {
+    button.setAttribute('aria-current', button.dataset.pane === id ? 'page' : 'false')
+  }
+  panes.general.classList.toggle('active', id === 'general')
+  panes.shortcuts.classList.toggle('active', id === 'shortcuts')
+}
+
+for (const button of navButtons) {
+  button.addEventListener('click', () => {
+    const id = button.dataset.pane
+    if (id === 'general' || id === 'shortcuts') showPane(id)
+  })
+}
+
+const loginRow = document.querySelector<HTMLElement>('#login-row')!
+const loginNote = document.querySelector<HTMLParagraphElement>('#login-note')!
+const loginSwitch = document.querySelector<HTMLInputElement>('#open-at-login')!
+
+function applyLoginState(state: LoginItemState): void {
+  if (state === 'unsupported') {
+    loginRow.hidden = true
+    loginNote.hidden = false
+    return
+  }
+  loginRow.hidden = false
+  loginNote.hidden = true
+  loginSwitch.checked = state === 'enabled'
+}
+
+loginSwitch.addEventListener('change', () => {
+  void bridge
+    .setOpenAtLogin(loginSwitch.checked)
+    .then(applyLoginState)
+    .catch((error: unknown) => {
+      console.error('Could not change Open at Login.', error)
+      void bridge.getOpenAtLogin().then(applyLoginState)
+    })
+})
+
+void bridge
+  .getOpenAtLogin()
+  .then(applyLoginState)
+  .catch((error: unknown) => {
+    console.error('Could not read Open at Login.', error)
+    applyLoginState('unsupported')
+  })
 
 const field = document.querySelector<HTMLButtonElement>('#shortcut')!
 const reset = document.querySelector<HTMLButtonElement>('#reset')!

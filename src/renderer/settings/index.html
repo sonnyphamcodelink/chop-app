@@ -10,43 +10,42 @@
         --muted: color-mix(in oklab, currentColor 55%, transparent);
         --line: color-mix(in oklab, currentColor 18%, transparent);
         --field: color-mix(in oklab, currentColor 6%, transparent);
+        --sidebar: color-mix(in oklab, currentColor 6%, transparent);
       }
-      html, body {
-        margin: 0;
-        height: 100%;
-        font: 13px -apple-system, system-ui, sans-serif;
-        user-select: none;
-      }
-      body {
+      html, body { margin: 0; height: 100%; font: 13px -apple-system, system-ui, sans-serif; user-select: none; }
+      body { display: flex; height: 100%; box-sizing: border-box; }
+      nav {
+        flex: 0 0 148px;
+        padding: 16px 10px;
+        background: var(--sidebar);
+        border-right: 1px solid var(--line);
         display: flex;
         flex-direction: column;
-        gap: 16px;
-        padding: 24px 28px;
+        gap: 4px;
         box-sizing: border-box;
       }
-      h1 {
-        margin: 0;
-        font-size: 15px;
-        font-weight: 600;
-      }
-      .row {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-      }
-      .row label { flex: 0 0 auto; }
-      /* The recorder itself: a field the user clicks, then types into. */
-      #shortcut {
-        flex: 1 1 auto;
-        min-width: 0;
-        padding: 8px 12px;
-        border: 1px solid var(--line);
+      nav button {
+        text-align: left;
+        padding: 8px 10px;
+        border: 0;
         border-radius: 8px;
-        background: var(--field);
+        background: transparent;
         color: inherit;
-        font: 15px -apple-system, system-ui, sans-serif;
-        text-align: center;
+        font: inherit;
         cursor: pointer;
+      }
+      nav button[aria-current="page"] { background: color-mix(in oklab, currentColor 12%, transparent); font-weight: 600; }
+      nav button:hover { background: color-mix(in oklab, currentColor 8%, transparent); }
+      main { flex: 1; min-width: 0; display: flex; flex-direction: column; padding: 20px 24px; box-sizing: border-box; gap: 12px; }
+      .pane { display: none; flex-direction: column; gap: 12px; flex: 1; min-height: 0; }
+      .pane.active { display: flex; }
+      h1 { margin: 0; font-size: 15px; font-weight: 600; }
+      .row { display: flex; align-items: center; gap: 12px; }
+      .row label { flex: 1; }
+      #shortcut {
+        flex: 1 1 auto; min-width: 0; padding: 8px 12px;
+        border: 1px solid var(--line); border-radius: 8px; background: var(--field);
+        color: inherit; font: 15px -apple-system, system-ui, sans-serif; text-align: center; cursor: pointer;
       }
       #shortcut:hover { border-color: color-mix(in oklab, currentColor 35%, transparent); }
       #shortcut.recording {
@@ -55,44 +54,62 @@
         color: var(--muted);
       }
       #reset {
-        flex: 0 0 auto;
-        padding: 8px 12px;
-        border: 1px solid var(--line);
-        border-radius: 8px;
-        background: transparent;
-        color: inherit;
-        font: 13px -apple-system, system-ui, sans-serif;
-        cursor: pointer;
+        flex: 0 0 auto; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px;
+        background: transparent; color: inherit; font: inherit; cursor: pointer;
       }
       #reset:hover { background: var(--field); }
-      #status {
-        margin: 0;
-        min-height: 32px;
-        line-height: 1.4;
-        color: var(--muted);
-      }
+      #status { margin: 0; min-height: 32px; line-height: 1.4; color: var(--muted); }
       #status.error { color: oklch(0.58 0.19 25); }
-      footer {
-        margin-top: auto;
-        padding-top: 12px;
-        border-top: 1px solid var(--line);
-        color: var(--muted);
-        line-height: 1.4;
+      footer { margin-top: auto; padding-top: 12px; border-top: 1px solid var(--line); color: var(--muted); line-height: 1.4; }
+      #login-note { margin: 0; color: var(--muted); line-height: 1.4; }
+      .switch {
+        position: relative; width: 40px; height: 24px; flex: 0 0 auto;
       }
+      .switch input { opacity: 0; width: 0; height: 0; }
+      .switch span {
+        position: absolute; inset: 0; border-radius: 999px; background: color-mix(in oklab, currentColor 22%, transparent);
+        cursor: pointer; transition: background 120ms ease;
+      }
+      .switch span::before {
+        content: ""; position: absolute; width: 18px; height: 18px; left: 3px; top: 3px;
+        border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.25); transition: transform 120ms ease;
+      }
+      .switch input:checked + span { background: #34c759; }
+      .switch input:checked + span::before { transform: translateX(16px); }
+      .switch input:disabled + span { opacity: 0.5; cursor: default; }
     </style>
   </head>
   <body>
-    <h1>Shortcuts</h1>
-    <div class="row">
-      <label for="shortcut">Capture</label>
-      <button id="shortcut" type="button">…</button>
-      <button id="reset" type="button">Restore Default</button>
-    </div>
-    <p id="status">Click the shortcut, then press the keys you want to use.</p>
-    <footer>
-      The capture shortcut works anywhere, so pick a combination other apps are
-      unlikely to want.
-    </footer>
+    <nav aria-label="Settings">
+      <button type="button" data-pane="general" aria-current="page">General</button>
+      <button type="button" data-pane="shortcuts">Shortcuts</button>
+    </nav>
+    <main>
+      <section id="pane-general" class="pane active" aria-labelledby="general-title">
+        <h1 id="general-title">General</h1>
+        <div class="row" id="login-row">
+          <label for="open-at-login">Open at Login</label>
+          <label class="switch">
+            <input id="open-at-login" type="checkbox" role="switch" />
+            <span></span>
+          </label>
+        </div>
+        <p id="login-note" hidden>Open at Login is not available on this system.</p>
+      </section>
+      <section id="pane-shortcuts" class="pane" aria-labelledby="shortcuts-title">
+        <h1 id="shortcuts-title">Shortcuts</h1>
+        <div class="row">
+          <label for="shortcut">Capture</label>
+          <button id="shortcut" type="button">…</button>
+          <button id="reset" type="button">Restore Default</button>
+        </div>
+        <p id="status">Click the shortcut, then press the keys you want to use.</p>
+        <footer>
+          The capture shortcut works anywhere, so pick a combination other apps are
+          unlikely to want.
+        </footer>
+      </section>
+    </main>
     <script type="module" src="./main.ts"></script>
   </body>
 </html>
