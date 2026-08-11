@@ -14,7 +14,11 @@
     "typecheck": "tsc --noEmit",
     "build:helper": "node scripts/build-swift-helper.mjs",
     "build:icons": "electron scripts/generate-icons.mjs",
-    "package": "npm run build:helper && electron-vite build && electron-builder --config electron-builder.yml",
+    "license:keygen": "node scripts/license-keygen.mjs",
+    "license:sign": "node scripts/sign-license.mjs",
+    "license:check": "node scripts/check-license-key.mjs",
+    "trial": "node scripts/trial-state.mjs",
+    "package": "npm run license:check && npm run build:helper && electron-vite build && electron-builder --config electron-builder.yml",
     "postinstall": "node scripts/build-swift-helper.mjs"
   },
   "devDependencies": {

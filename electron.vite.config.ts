@@ -11,6 +11,7 @@ export default defineConfig({
         input: {
           editor: resolve('src/preload/editor.ts'),
           overlay: resolve('src/preload/overlay.ts'),
+          settings: resolve('src/preload/settings.ts'),
         },
       },
     },
@@ -23,6 +24,7 @@ export default defineConfig({
         input: {
           editor: resolve('src/renderer/editor/index.html'),
           overlay: resolve('src/renderer/overlay/index.html'),
+          settings: resolve('src/renderer/settings/index.html'),
         },
       },
     },

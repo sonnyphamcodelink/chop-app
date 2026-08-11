@@ -30,7 +30,7 @@ import {
   setTool,
   undoState,
 } from '@shared/editor-state'
-import type { CaptureResult } from '@shared/ipc'
+import type { CaptureResult, ShortcutInfo } from '@shared/ipc'
 import type { ToolId } from '@shared/tools'
 import { createCalloutInput, type CalloutInputGeometry } from './callout-input'
 import { browserCanvasFactory, createCanvasView, textMeasurer } from './canvas-view'
@@ -48,6 +48,8 @@ type EditorBridge = {
   listCaptures(): Promise<unknown>
   openCapture(id: string): Promise<unknown>
   deleteCapture(id: string): Promise<boolean>
+  getShortcut(): Promise<ShortcutInfo>
+  onShortcutChanged(handler: (shortcut: ShortcutInfo) => void): void
 }
 
 const bridge = (window as unknown as { chopEditor: EditorBridge }).chopEditor
@@ -452,6 +454,17 @@ bridge.onCapture((capture) => {
   })
   image.src = capture.dataUrl
 })
+
+/** Keeps the placeholder honest about whichever shortcut is in force. */
+function showCaptureHint(shortcut: ShortcutInfo): void {
+  empty.textContent = `Press ${shortcut.display} to capture`
+}
+
+bridge.onShortcutChanged(showCaptureHint)
+void bridge
+  .getShortcut()
+  .then(showCaptureHint)
+  .catch((error: unknown) => console.error('Could not read the capture shortcut.', error))
 
 void filmstrip.refresh().then(() => {
   if (!loaded) void openLastCapture()

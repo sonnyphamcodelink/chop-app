@@ -1,5 +1,10 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import { CHANNELS, type CaptureResult, type SaveRequest } from '@shared/ipc'
+import {
+  CHANNELS,
+  type CaptureResult,
+  type SaveRequest,
+  type ShortcutInfo,
+} from '@shared/ipc'
 
 contextBridge.exposeInMainWorld('chopEditor', {
   onCapture(handler: (capture: CaptureResult) => void): void {
@@ -24,5 +29,13 @@ contextBridge.exposeInMainWorld('chopEditor', {
   },
   deleteCapture(id: string): Promise<boolean> {
     return ipcRenderer.invoke(CHANNELS.deleteCapture, id) as Promise<boolean>
+  },
+  getShortcut(): Promise<ShortcutInfo> {
+    return ipcRenderer.invoke(CHANNELS.getShortcut) as Promise<ShortcutInfo>
+  },
+  onShortcutChanged(handler: (shortcut: ShortcutInfo) => void): void {
+    ipcRenderer.on(CHANNELS.shortcutChanged, (_event, shortcut: ShortcutInfo) =>
+      handler(shortcut),
+    )
   },
 })

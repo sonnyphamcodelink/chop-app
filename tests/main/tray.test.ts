@@ -1,10 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { LoginItemState } from '../../src/main/login-item-state'
+import type { LicenseStatus } from '../../src/shared/license/status'
+import { SAMPLE_CLAIMS } from '../helpers/license-keys'
 
 type Template = {
   label?: string
   type?: string
   checked?: boolean
+  accelerator?: string
   click?: () => void
 }[]
 
@@ -30,90 +32,105 @@ vi.mock('electron', () => ({
 
 const { createTray } = await import('../../src/main/tray')
 
-const toggles: boolean[] = []
-let state: LoginItemState = 'disabled'
+let shortcut = 'CommandOrControl+Shift+2'
+let settingsOpened = 0
+let licenseOpened = 0
+let status: LicenseStatus = { kind: 'licensed', claims: SAMPLE_CLAIMS }
 
-function build(): void {
-  createTray({
+function build(): { refresh(): void } {
+  return createTray({
     onCapture: () => {},
     onOpenEditor: () => {},
+    onOpenSettings: () => void (settingsOpened += 1),
+    onOpenLicense: () => void (licenseOpened += 1),
     onCheckForUpdates: () => {},
-    openAtLogin: () => state,
-    onToggleOpenAtLogin: (enabled) => void toggles.push(enabled),
+    captureShortcut: () => shortcut,
     captureRoot: () => '/captures',
+    licenseStatus: () => status,
   })
 }
 
-const loginItem = (menu: Template): Template[number] | undefined =>
-  menu.find((entry) => entry.label === 'Open at Login')
-
 beforeEach(() => {
   menus.length = 0
-  toggles.length = 0
-  state = 'disabled'
+  shortcut = 'CommandOrControl+Shift+2'
+  settingsOpened = 0
+  licenseOpened = 0
+  status = { kind: 'licensed', claims: SAMPLE_CLAIMS }
 })
 
 describe('createTray', () => {
-  it('offers Open at Login as an unchecked checkbox when it is off', () => {
-    build()
-    const item = loginItem(menus[0] ?? [])
-    expect(item?.type).toBe('checkbox')
-    expect(item?.checked).toBe(false)
-  })
-
-  it('checks the item when the OS launches Chop at login', () => {
-    state = 'enabled'
-    build()
-    expect(loginItem(menus[0] ?? [])?.checked).toBe(true)
-  })
-
-  it('leaves the item unchecked while approval is pending', () => {
-    state = 'requires-approval'
-    build()
-    expect(loginItem(menus[0] ?? [])?.checked).toBe(false)
-  })
-
-  it('omits the item where login items are unsupported', () => {
-    state = 'unsupported'
-    build()
-    expect(loginItem(menus[0] ?? [])).toBeUndefined()
-  })
-
-  it('asks to turn the login item on when it is off', () => {
-    build()
-    loginItem(menus[0] ?? [])?.click?.()
-    expect(toggles).toEqual([true])
-  })
-
-  it('asks to turn the login item off when it is on', () => {
-    state = 'enabled'
-    build()
-    loginItem(menus[0] ?? [])?.click?.()
-    expect(toggles).toEqual([false])
-  })
-
-  it('redraws the menu from the state the OS reports after a toggle', () => {
-    build()
-    state = 'enabled'
-    loginItem(menus[0] ?? [])?.click?.()
-
-    expect(menus).toHaveLength(2)
-    expect(loginItem(menus[1] ?? [])?.checked).toBe(true)
-  })
-
-  it('keeps the item unchecked when the OS refused the change', () => {
-    build()
-    loginItem(menus[0] ?? [])?.click?.()
-    expect(loginItem(menus[1] ?? [])?.checked).toBe(false)
-  })
-
-  it('keeps the existing entries alongside the new one', () => {
+  it('does not offer Open at Login', () => {
     build()
     const labels = (menus[0] ?? []).map((entry) => entry.label)
-    expect(labels).toContain('Capture')
-    expect(labels).toContain('Open Editor')
-    expect(labels).toContain('Open Captures Folder')
-    expect(labels).toContain('Check for Updates…')
-    expect(labels).toContain('Quit Chop')
+    expect(labels).not.toContain('Open at Login')
+  })
+
+  it('keeps the action entries', () => {
+    build()
+    const labels = (menus[0] ?? []).map((entry) => entry.label)
+    expect(labels).toEqual([
+      'Capture',
+      'Open Editor',
+      undefined, // separator
+      'Open Captures Folder',
+      'Settings…',
+      undefined, // separator
+      'Licensed',
+      undefined, // separator
+      'Version 1.2.3',
+      'Check for Updates…',
+      undefined, // separator
+      'Quit Chop',
+    ])
+  })
+
+  it('shows the licence state and offers no key entry once licensed', () => {
+    build()
+    const labels = (menus[0] ?? []).map((entry) => entry.label)
+    expect(labels).toContain('Licensed')
+    expect(labels).not.toContain('Enter Licence…')
+  })
+
+  it('offers key entry whenever a licence is wanted', () => {
+    status = { kind: 'trial', daysLeft: 6, endsAt: '2026-08-20T00:00:00.000Z' }
+    build()
+
+    const labels = (menus[0] ?? []).map((entry) => entry.label)
+    expect(labels).toContain('Trial — 6 days left')
+    ;(menus[0] ?? []).find((entry) => entry.label === 'Enter Licence…')?.click?.()
+    expect(licenseOpened).toBe(1)
+  })
+
+  it('picks up a licence that changed elsewhere when refreshed', () => {
+    status = { kind: 'trial-expired', endsAt: '2026-08-01T00:00:00.000Z' }
+    const controller = build()
+    status = { kind: 'licensed', claims: SAMPLE_CLAIMS }
+    controller.refresh()
+
+    const labels = (menus[1] ?? []).map((entry) => entry.label)
+    expect(labels).toContain('Licensed')
+    expect(labels).not.toContain('Enter Licence…')
+  })
+
+  it('shows the capture shortcut in force', () => {
+    shortcut = 'Control+Alt+K'
+    build()
+    const capture = (menus[0] ?? []).find((entry) => entry.label === 'Capture')
+    expect(capture?.accelerator).toBe('Control+Alt+K')
+  })
+
+  it('picks up a shortcut changed elsewhere when refreshed', () => {
+    const controller = build()
+    shortcut = 'Control+Alt+K'
+    controller.refresh()
+
+    const capture = (menus[1] ?? []).find((entry) => entry.label === 'Capture')
+    expect(capture?.accelerator).toBe('Control+Alt+K')
+  })
+
+  it('opens settings from the menu', () => {
+    build()
+    ;(menus[0] ?? []).find((entry) => entry.label === 'Settings…')?.click?.()
+    expect(settingsOpened).toBe(1)
   })
 })
