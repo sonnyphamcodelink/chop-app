@@ -1,38 +1,50 @@
 import { DEFAULT_CAPTURE_SHORTCUT } from '@shared/accelerator'
-import type { LoginItemState, ShortcutInfo, ShortcutUpdate } from '@shared/ipc'
+import {
+  isSettingsPane,
+  type LoginItemState,
+  SETTINGS_PANES,
+  type SettingsPane,
+  type ShortcutInfo,
+  type ShortcutUpdate,
+} from '@shared/ipc'
+import { initLicensePane, type LicenseBridge } from './license'
 import { createRecorder } from './recorder'
 
-type SettingsBridge = {
+type SettingsBridge = LicenseBridge & {
   platform: string
   getShortcut(): Promise<ShortcutInfo>
   setShortcut(accelerator: string): Promise<ShortcutUpdate>
   setRecording(recording: boolean): void
   getOpenAtLogin(): Promise<LoginItemState>
   setOpenAtLogin(enabled: boolean): Promise<LoginItemState>
+  onShowPane(listener: (pane: SettingsPane) => void): void
 }
 
 const bridge = (window as unknown as { chopSettings: SettingsBridge }).chopSettings
 
 const navButtons = document.querySelectorAll<HTMLButtonElement>('nav [data-pane]')
-const panes = {
-  general: document.querySelector<HTMLElement>('#pane-general')!,
-  shortcuts: document.querySelector<HTMLElement>('#pane-shortcuts')!,
-}
+const panes = new Map<SettingsPane, HTMLElement>(
+  SETTINGS_PANES.map((pane) => [pane, document.querySelector<HTMLElement>(`#pane-${pane}`)!]),
+)
 
-function showPane(id: 'general' | 'shortcuts'): void {
+function showPane(id: SettingsPane): void {
   for (const button of navButtons) {
     button.setAttribute('aria-current', button.dataset.pane === id ? 'page' : 'false')
   }
-  panes.general.classList.toggle('active', id === 'general')
-  panes.shortcuts.classList.toggle('active', id === 'shortcuts')
+  for (const [pane, section] of panes) section.classList.toggle('active', pane === id)
 }
 
 for (const button of navButtons) {
   button.addEventListener('click', () => {
     const id = button.dataset.pane
-    if (id === 'general' || id === 'shortcuts') showPane(id)
+    if (isSettingsPane(id)) showPane(id)
   })
 }
+
+// Main asks for a pane when it sends the user here, e.g. after a refused capture.
+bridge.onShowPane(showPane)
+
+initLicensePane(bridge)
 
 const loginRow = document.querySelector<HTMLElement>('#login-row')!
 const loginNote = document.querySelector<HTMLParagraphElement>('#login-note')!

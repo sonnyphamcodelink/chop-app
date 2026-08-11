@@ -4,7 +4,10 @@ import { warmOverlays } from './capture/overlay-manager'
 import { getEditorWindow, sendCapture } from './editor-window'
 import { captureShortcut, registerHotkeys, unregisterHotkeys } from './hotkeys'
 import { registerEditorHandlers } from './ipc/editor-handlers'
+import { registerLicenseHandlers } from './ipc/license-handlers'
 import { registerSettingsHandlers } from './ipc/settings-handlers'
+import { currentLicenseStatus, startTrialIfNeeded } from './license'
+import { allowCapture } from './license/gate'
 import { readSettings } from './settings-store'
 import { openSettingsWindow } from './settings-window'
 import { defaultCaptureRoot } from './storage/capture-root'
@@ -15,6 +18,10 @@ import { checkForUpdates } from './updates'
 let tray: TrayController | null = null
 
 async function capture(): Promise<void> {
+  // Every route into a capture — hotkey, tray, editor — lands here, so this is
+  // the only place the licence needs checking.
+  if (!(await allowCapture())) return
+
   const result = await runCaptureFlow()
   if (result) sendCapture(result)
 }
@@ -28,10 +35,16 @@ if (!app.requestSingleInstanceLock()) {
   void app.whenReady().then(() => {
     // Tests point this at a temp directory so they never touch ~/Pictures.
     const captureRoot = process.env.CHOP_CAPTURE_ROOT ?? defaultCaptureRoot()
+    // Stamped before anything can ask about entitlement, so the first launch
+    // sees a trial that has begun rather than one about to.
+    startTrialIfNeeded()
+
     registerEditorHandlers(captureRoot)
     registerHotkeys(readSettings().captureShortcut, () => void capture())
     // The tray shows the accelerator, so it redraws whenever it changes.
     registerSettingsHandlers(() => tray?.refresh())
+    // The tray shows the licence state next to it.
+    registerLicenseHandlers(() => tray?.refresh())
 
     // E2E seam: the main bundle is a single file, so Playwright cannot import
     // sendCapture directly. Only exposed when a test capture root is set.
@@ -43,9 +56,11 @@ if (!app.requestSingleInstanceLock()) {
       onCapture: () => void capture(),
       onOpenEditor: () => getEditorWindow().show(),
       onOpenSettings: () => openSettingsWindow(),
+      onOpenLicense: () => openSettingsWindow('license'),
       onCheckForUpdates: () => void checkForUpdates({ silent: false }),
       captureShortcut,
       captureRoot: () => captureRoot,
+      licenseStatus: currentLicenseStatus,
     })
 
     // Build hidden overlay and editor windows now, so the first hotkey press

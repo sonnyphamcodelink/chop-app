@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { LicenseStatus } from '../../src/shared/license/status'
+import { SAMPLE_CLAIMS } from '../helpers/license-keys'
 
 type Template = {
   label?: string
@@ -32,15 +34,19 @@ const { createTray } = await import('../../src/main/tray')
 
 let shortcut = 'CommandOrControl+Shift+2'
 let settingsOpened = 0
+let licenseOpened = 0
+let status: LicenseStatus = { kind: 'licensed', claims: SAMPLE_CLAIMS }
 
 function build(): { refresh(): void } {
   return createTray({
     onCapture: () => {},
     onOpenEditor: () => {},
     onOpenSettings: () => void (settingsOpened += 1),
+    onOpenLicense: () => void (licenseOpened += 1),
     onCheckForUpdates: () => {},
     captureShortcut: () => shortcut,
     captureRoot: () => '/captures',
+    licenseStatus: () => status,
   })
 }
 
@@ -48,6 +54,8 @@ beforeEach(() => {
   menus.length = 0
   shortcut = 'CommandOrControl+Shift+2'
   settingsOpened = 0
+  licenseOpened = 0
+  status = { kind: 'licensed', claims: SAMPLE_CLAIMS }
 })
 
 describe('createTray', () => {
@@ -67,11 +75,41 @@ describe('createTray', () => {
       'Open Captures Folder',
       'Settings…',
       undefined, // separator
+      'Licensed',
+      undefined, // separator
       'Version 1.2.3',
       'Check for Updates…',
       undefined, // separator
       'Quit Chop',
     ])
+  })
+
+  it('shows the licence state and offers no key entry once licensed', () => {
+    build()
+    const labels = (menus[0] ?? []).map((entry) => entry.label)
+    expect(labels).toContain('Licensed')
+    expect(labels).not.toContain('Enter Licence…')
+  })
+
+  it('offers key entry whenever a licence is wanted', () => {
+    status = { kind: 'trial', daysLeft: 6, endsAt: '2026-08-20T00:00:00.000Z' }
+    build()
+
+    const labels = (menus[0] ?? []).map((entry) => entry.label)
+    expect(labels).toContain('Trial — 6 days left')
+    ;(menus[0] ?? []).find((entry) => entry.label === 'Enter Licence…')?.click?.()
+    expect(licenseOpened).toBe(1)
+  })
+
+  it('picks up a licence that changed elsewhere when refreshed', () => {
+    status = { kind: 'trial-expired', endsAt: '2026-08-01T00:00:00.000Z' }
+    const controller = build()
+    status = { kind: 'licensed', claims: SAMPLE_CLAIMS }
+    controller.refresh()
+
+    const labels = (menus[1] ?? []).map((entry) => entry.label)
+    expect(labels).toContain('Licensed')
+    expect(labels).not.toContain('Enter Licence…')
   })
 
   it('shows the capture shortcut in force', () => {

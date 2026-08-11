@@ -61,6 +61,43 @@
       #reset:hover { background: var(--field); }
       #status { margin: 0; min-height: 32px; line-height: 1.4; color: var(--muted); }
       #status.error { color: oklch(0.58 0.19 25); }
+      .state {
+        padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px;
+        background: var(--field); display: flex; flex-direction: column; gap: 4px;
+      }
+      .state strong { font-size: 14px; }
+      .state p { margin: 0; color: var(--muted); line-height: 1.4; }
+      .state.good strong { color: oklch(0.55 0.15 150); }
+      .state.warning strong { color: oklch(0.62 0.15 75); }
+      .state.error strong { color: oklch(0.58 0.19 25); }
+      #license-entry { display: flex; flex-direction: column; gap: 8px; }
+      #license-entry > label { color: var(--muted); }
+      #license-input {
+        width: 100%; box-sizing: border-box; resize: none; padding: 8px 10px;
+        border: 1px solid var(--line); border-radius: 8px; background: var(--field);
+        color: inherit; font: 12px ui-monospace, SFMono-Regular, Menlo, monospace;
+        line-height: 1.5; user-select: text; word-break: break-all;
+      }
+      #license-input:focus-visible { outline: 2px solid var(--accent); outline-offset: -1px; }
+      .actions { justify-content: flex-start; }
+      .actions button, #license-remove {
+        padding: 8px 14px; border: 1px solid var(--line); border-radius: 8px;
+        background: transparent; color: inherit; font: inherit; cursor: pointer;
+      }
+      .actions button:hover, #license-remove:hover { background: var(--field); }
+      .actions button.primary {
+        background: var(--accent); border-color: transparent; color: #fff; font-weight: 600;
+      }
+      .actions button.primary:hover { filter: brightness(1.08); }
+      .actions button:disabled { opacity: 0.5; cursor: default; }
+      /* Sits against the Remove button rather than sharing the row's slack
+         with the label, which would leave it stranded mid-row. */
+      #license-key {
+        flex: 0 1 auto; min-width: 0; font: 12px ui-monospace, SFMono-Regular, Menlo, monospace;
+        color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      }
+      #license-status { margin: 0; min-height: 20px; line-height: 1.4; color: var(--muted); }
+      #license-status.error { color: oklch(0.58 0.19 25); }
       footer { margin-top: auto; padding-top: 12px; border-top: 1px solid var(--line); color: var(--muted); line-height: 1.4; }
       #login-note { margin: 0; color: var(--muted); line-height: 1.4; }
       .switch {
@@ -84,6 +121,7 @@
     <nav aria-label="Settings">
       <button type="button" data-pane="general" aria-current="page">General</button>
       <button type="button" data-pane="shortcuts">Shortcuts</button>
+      <button type="button" data-pane="license">License</button>
     </nav>
     <main>
       <section id="pane-general" class="pane active" aria-labelledby="general-title">
@@ -108,6 +146,41 @@
         <footer>
           The capture shortcut works anywhere, so pick a combination other apps are
           unlikely to want.
+        </footer>
+      </section>
+      <section id="pane-license" class="pane" aria-labelledby="license-title">
+        <h1 id="license-title">License</h1>
+        <div id="license-state" class="state" role="status">
+          <strong id="license-headline">Checking…</strong>
+          <p id="license-detail"></p>
+        </div>
+        <div id="license-installed" hidden>
+          <div class="row">
+            <label>Installed key</label>
+            <code id="license-key">—</code>
+            <button id="license-remove" type="button">Remove</button>
+          </div>
+        </div>
+        <div id="license-entry">
+          <label for="license-input">Licence key</label>
+          <textarea
+            id="license-input"
+            rows="3"
+            spellcheck="false"
+            autocapitalize="off"
+            autocomplete="off"
+            placeholder="CHOP1.…"
+          ></textarea>
+          <div class="row actions">
+            <button id="license-activate" type="button" class="primary">Activate</button>
+            <button id="license-buy" type="button">Buy Chop</button>
+          </div>
+        </div>
+        <p id="license-status"></p>
+        <footer>
+          Your key is checked on this Mac and never leaves it, so Chop keeps working
+          offline. Keep the key with your receipt - it is what moves the licence to a
+          new machine.
         </footer>
       </section>
     </main>

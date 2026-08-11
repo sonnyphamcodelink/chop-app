@@ -6,15 +6,21 @@ import {
   Tray,
 } from 'electron'
 import { join } from 'node:path'
+import { needsLicense } from '@shared/license/status'
+import type { LicenseStatus } from '@shared/license/status'
+import { trayLicenseLabel } from '@shared/license/summary'
 
 export type TrayHandlers = {
   onCapture(): void
   onOpenEditor(): void
   onOpenSettings(): void
+  onOpenLicense(): void
   onCheckForUpdates(): void
   /** Capture accelerator, read fresh each time the menu is built. */
   captureShortcut(): string
   captureRoot(): string
+  /** Licence state, read fresh each time the menu is built. */
+  licenseStatus(): LicenseStatus
 }
 
 function iconPath(): string {
@@ -24,6 +30,8 @@ function iconPath(): string {
 }
 
 function buildMenu(handlers: TrayHandlers): Menu {
+  const status = handlers.licenseStatus()
+
   return Menu.buildFromTemplate([
     { label: 'Capture', accelerator: handlers.captureShortcut(), click: handlers.onCapture },
     { label: 'Open Editor', click: handlers.onOpenEditor },
@@ -34,6 +42,12 @@ function buildMenu(handlers: TrayHandlers): Menu {
     },
     { label: 'Settings…', click: handlers.onOpenSettings },
     { type: 'separator' },
+    { label: trayLicenseLabel(status), enabled: false },
+    // Nothing to offer once a good key is installed; the pane is still in Settings.
+    ...(needsLicense(status)
+      ? [{ label: 'Enter Licence…', click: handlers.onOpenLicense }]
+      : []),
+    { type: 'separator' as const },
     { label: `Version ${app.getVersion()}`, enabled: false },
     { label: 'Check for Updates…', click: handlers.onCheckForUpdates },
     { type: 'separator' },
