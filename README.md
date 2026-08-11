@@ -96,8 +96,21 @@ To publish a release:
 
 1. Bump `version` in `package.json` and commit it.
 2. `npm run package`
-3. Upload `release/Chop-<version>*.dmg` to a new release in the releases repo,
-   tagged `v<version>` — the tag is what the running app compares against.
+3. Upload the built artifacts to a new release in the releases repo, tagged
+   `v<version>` — the tag is what the running app compares against.
+
+Artifact names carry no version on purpose:
+
+    Chop-mac-arm64.dmg
+    Chop-mac-x64.dmg
+    Chop-win-x64.exe
+
+The landing page links at `releases/latest/download/<name>`, a permanent URL
+that resolves to whatever the newest release published under that exact name.
+That is what makes its Download button download the file rather than send
+someone to GitHub — so renaming an artifact silently breaks it. The site's
+`npm run check:downloads` asks GitHub whether these names really exist, and
+fails its build when one is missing.
 
 ## Develop
 

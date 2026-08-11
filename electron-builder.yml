@@ -17,6 +17,11 @@ extraResources:
 mac:
   icon: build/icon.png
   category: public.app-category.productivity
+  # Deliberately version-less. The landing page links straight at
+  # releases/latest/download/<name>, which only resolves for a name that does
+  # not change between releases — that is what makes Download a download
+  # rather than a trip to GitHub. The app reports its own version anyway.
+  artifactName: ${productName}-mac-${arch}.${ext}
   target:
     - target: dmg
       arch: [arm64, x64]
@@ -30,6 +35,8 @@ mac:
     NSScreenCaptureUsageDescription: Chop needs screen access to capture screenshots.
 win:
   icon: build/icon.png
+  # Version-less for the same reason as the mac artifacts above.
+  artifactName: ${productName}-win-${arch}.${ext}
   target:
     - target: nsis
       arch: [x64]
