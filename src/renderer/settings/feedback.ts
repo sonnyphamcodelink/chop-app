@@ -8,10 +8,15 @@
  */
 import {
   ATTACHMENT_MAX_BYTES,
+  attachmentProblem,
   formatBytes,
+  MAX_ATTACHMENTS,
   parsePastedImage,
   type PastedImage,
+  RAW_PASTE_MAX_BYTES,
+  totalBytes,
 } from '@shared/feedback/attachment'
+import { compressPastedImage } from './image-compress'
 import { isSendable, messagePlaceholder, messageProblem } from '@shared/feedback/draft'
 import { diagnosticsLines, feedbackTranscript } from '@shared/feedback/transcript'
 import type {
@@ -32,10 +37,7 @@ type Elements = {
   readonly kind: HTMLElement
   readonly message: HTMLTextAreaElement
   readonly pasteHint: HTMLElement
-  readonly image: HTMLElement
-  readonly thumb: HTMLImageElement
-  readonly imageDetail: HTMLElement
-  readonly imageRemove: HTMLButtonElement
+  readonly images: HTMLElement
   readonly diagnostics: HTMLInputElement
   readonly included: HTMLDetailsElement
   readonly includedList: HTMLUListElement
@@ -50,6 +52,7 @@ type Elements = {
 
 const DRAFT_KEY = 'chop.feedback.draft'
 const IDLE_HINT = 'Sent straight to the developer. No account needed.'
+const PASTE_HINT = 'Paste a screenshot straight into the box to send it along.'
 const IMAGE_REFUSED =
   `That image could not be attached. Chop takes a PNG, JPEG, GIF or WebP under ${formatBytes(ATTACHMENT_MAX_BYTES)}.`
 
@@ -103,10 +106,7 @@ export function initFeedbackPane(bridge: FeedbackBridge): void {
     kind: document.querySelector<HTMLElement>('#feedback-kind')!,
     message: document.querySelector<HTMLTextAreaElement>('#feedback-message')!,
     pasteHint: document.querySelector<HTMLElement>('#feedback-paste-hint')!,
-    image: document.querySelector<HTMLElement>('#feedback-image')!,
-    thumb: document.querySelector<HTMLImageElement>('#feedback-thumb')!,
-    imageDetail: document.querySelector<HTMLElement>('#feedback-image-detail')!,
-    imageRemove: document.querySelector<HTMLButtonElement>('#feedback-image-remove')!,
+    images: document.querySelector<HTMLElement>('#feedback-images')!,
     diagnostics: document.querySelector<HTMLInputElement>('#feedback-diagnostics')!,
     included: document.querySelector<HTMLDetailsElement>('#feedback-included')!,
     includedList: document.querySelector<HTMLUListElement>('#feedback-included-list')!,
@@ -123,7 +123,7 @@ export function initFeedbackPane(bridge: FeedbackBridge): void {
 
   let context: FeedbackContext | null = null
   let kind: FeedbackKind = 'idea'
-  let image: PastedImage | null = null
+  let images: PastedImage[] = []
   let sending = false
 
   function showStatus(message: string, isError = false): void {
@@ -146,15 +146,45 @@ export function initFeedbackPane(bridge: FeedbackBridge): void {
     writeDraft({ kind: next, message: elements.message.value })
   }
 
-  function showImage(next: PastedImage | null): void {
-    image = next
-    elements.image.hidden = next === null
-    // The hint has done its job once something is attached.
-    elements.pasteHint.hidden = next !== null
-    if (!next) return
-    elements.thumb.src = next.dataUrl
-    elements.imageDetail.textContent =
-      `${next.mediaType.replace('image/', '').toUpperCase()} · ${formatBytes(next.byteLength)}`
+  /** One thumbnail per pasted image, each able to take itself back off. */
+  function showImages(next: readonly PastedImage[]): void {
+    images = [...next]
+    elements.images.hidden = images.length === 0
+
+    elements.images.replaceChildren(
+      ...images.map((item, index) => {
+        const figure = document.createElement('div')
+        figure.className = 'thumb'
+
+        const preview = document.createElement('img')
+        preview.src = item.dataUrl
+        preview.alt = `Pasted image ${index + 1}`
+
+        const remove = document.createElement('button')
+        remove.type = 'button'
+        remove.textContent = '×'
+        remove.setAttribute('aria-label', `Remove image ${index + 1}`)
+        remove.addEventListener('click', () => {
+          showImages(images.filter((_, at) => at !== index))
+          elements.message.focus()
+        })
+
+        figure.append(preview, remove)
+        return figure
+      }),
+    )
+
+    // The hint doubles as the count, so the size going up is never a surprise.
+    if (images.length === 0) {
+      elements.pasteHint.textContent = PASTE_HINT
+      return
+    }
+    const size = formatBytes(totalBytes(images))
+    const noun = images.length === 1 ? '1 image' : `${images.length} images`
+    elements.pasteHint.textContent =
+      images.length < MAX_ATTACHMENTS
+        ? `${noun} attached · ${size}. You can paste ${MAX_ATTACHMENTS - images.length} more.`
+        : `${noun} attached · ${size}. That is the limit.`
   }
 
   function currentDraft(): FeedbackDraft {
@@ -162,7 +192,7 @@ export function initFeedbackPane(bridge: FeedbackBridge): void {
       kind,
       message: elements.message.value.trim(),
       includeDiagnostics: elements.diagnostics.checked,
-      attachment: image?.dataUrl ?? null,
+      attachments: images.map((item) => item.dataUrl),
     }
   }
 
@@ -179,7 +209,7 @@ export function initFeedbackPane(bridge: FeedbackBridge): void {
 
   function reset(): void {
     elements.message.value = ''
-    showImage(null)
+    showImages([])
     elements.sent.hidden = true
     elements.form.hidden = false
     elements.note.hidden = false
@@ -212,7 +242,7 @@ export function initFeedbackPane(bridge: FeedbackBridge): void {
         writeDraft(null)
         elements.form.hidden = true
         elements.sent.hidden = false
-        // The note is about the image, which there is no longer one to send.
+        // The note is about the images, which there are no longer any to send.
         elements.note.hidden = true
         return
       }
@@ -231,6 +261,40 @@ export function initFeedbackPane(bridge: FeedbackBridge): void {
       sending = false
       elements.send.disabled = false
     }
+  }
+
+  /**
+   * A pasted image, shrunk and then measured. The size caps are applied to the
+   * reduced version, so a screenshot too large to send as it arrived usually
+   * still fits once it has been through the canvas.
+   */
+  async function attach(clipboard: DataTransfer | null): Promise<void> {
+    const dataUrl = await readPastedImage(clipboard)
+    // Loose gate first: the right kind of thing, and not so vast that opening
+    // it would stall the window.
+    const raw = dataUrl ? parsePastedImage(dataUrl, RAW_PASTE_MAX_BYTES) : null
+    if (!raw) {
+      showStatus(IMAGE_REFUSED, true)
+      return
+    }
+
+    const reduced = await compressPastedImage(raw)
+    // Strict gate second, against what will actually be sent.
+    const parsed = parsePastedImage(reduced.dataUrl)
+    if (!parsed) {
+      showStatus(IMAGE_REFUSED, true)
+      return
+    }
+
+    // A perfectly good image can still be the one too many.
+    const problem = attachmentProblem(images, parsed)
+    if (problem) {
+      showStatus(problem, true)
+      return
+    }
+
+    showImages([...images, parsed])
+    showStatus(IDLE_HINT)
   }
 
   /**
@@ -272,20 +336,11 @@ export function initFeedbackPane(bridge: FeedbackBridge): void {
     if (![...(clipboard?.items ?? [])].some((item) => item.type.startsWith('image/'))) return
     event.preventDefault()
 
-    void readPastedImage(clipboard).then((dataUrl) => {
-      const parsed = dataUrl ? parsePastedImage(dataUrl) : null
-      if (!parsed) {
-        showStatus(IMAGE_REFUSED, true)
-        return
-      }
-      showImage(parsed)
-      showStatus(IDLE_HINT)
+    showStatus('Preparing the image…')
+    void attach(clipboard).catch((error: unknown) => {
+      console.error('Could not attach the pasted image.', error)
+      showStatus(IMAGE_REFUSED, true)
     })
-  })
-
-  elements.imageRemove.addEventListener('click', () => {
-    showImage(null)
-    elements.message.focus()
   })
 
   elements.message.addEventListener('input', () => {

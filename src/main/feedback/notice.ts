@@ -33,7 +33,8 @@ export function sendFeedbackNotice(
   diagnostics: FeedbackDiagnostics | null,
 ): FeedbackNotice {
   const going = ['Your message']
-  if (draft.attachment) going.push('The image you pasted')
+  const count = draft.attachments.length
+  if (count > 0) going.push(count === 1 ? 'The image you pasted' : `The ${count} images you pasted`)
   if (diagnostics) going.push(...diagnosticsLines(diagnostics))
 
   return {

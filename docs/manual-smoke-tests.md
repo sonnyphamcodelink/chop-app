@@ -87,14 +87,23 @@ watch — a request bin is enough — before starting.
 - [ ] Confirming posts, and the form is replaced by the thanks card
 - [ ] "Send another" clears the box, the image and the status
 
-Pasting an image:
+Pasting images:
 
-- [ ] ⌘V with a screenshot on the clipboard shows the thumbnail, type and size
-- [ ] The paste hint disappears once an image is attached
-- [ ] The confirmation sheet names the pasted image
-- [ ] The posted request carries the image as `capture`, decoded, not base64 text
-- [ ] "Remove" drops it; the next send carries no file
-- [ ] Pasting a second image replaces the first
+- [ ] ⌘V with a screenshot on the clipboard shows a thumbnail
+- [ ] The size shown is the reduced one, well under what the PNG on the clipboard was
+- [ ] A full-screen Retina capture arrives at the endpoint as WebP, longest edge 2000
+- [ ] Text in the delivered image is still readable at 100%
+- [ ] A capture already under 2000px keeps its pixels but still shrinks in bytes
+- [ ] An animated GIF arrives still animated, not flattened to one frame
+- [ ] A capture too large to send as it arrived is accepted once reduced
+- [ ] The hint becomes a count and a total size, and says how many more fit
+- [ ] Pasting a second and third adds to the strip rather than replacing
+- [ ] A fourth paste is refused, naming the limit, and the first three survive
+- [ ] Pasting past 12 MB total is refused even when under three images
+- [ ] Each thumbnail's × removes only that one; the rest keep their order
+- [ ] The confirmation sheet names one image, or counts several
+- [ ] The posted request repeats `capture` once per image, decoded, in order
+- [ ] Files arrive named `pasted-image-1`, `-2`, `-3` with the right extensions
 - [ ] Pasting text still types into the box as normal
 - [ ] Pasting something that is not an image Chop sends is refused with a message
 - [ ] Typing, closing the window, and reopening restores the text but not the image

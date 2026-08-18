@@ -12,9 +12,9 @@
  * offline-first, so that will happen, and losing what someone just typed is
  * the one outcome this feature cannot afford.
  */
-export const FEEDBACK_URL = 'https://chop.asia/api/feedback'
+export const FEEDBACK_URL = 'https://api.chop.asia/feedback'
 
-export const FEEDBACK_EMAIL = 'feedback@chop.asia'
+export const FEEDBACK_EMAIL = 'support@chop.asia'
 
 /** Long enough for a capture on a slow connection, short enough to give up. */
 export const FEEDBACK_TIMEOUT_MS = 20_000

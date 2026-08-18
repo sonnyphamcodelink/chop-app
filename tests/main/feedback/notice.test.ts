@@ -6,7 +6,7 @@ const draft: FeedbackDraft = {
   kind: 'idea',
   message: 'A filmstrip search box would help.',
   includeDiagnostics: true,
-  attachment: null,
+  attachments: [],
 }
 
 const diagnostics: FeedbackDiagnostics = {
@@ -41,8 +41,15 @@ describe('sendFeedbackNotice', () => {
   })
 
   it('names the pasted image, which is the reason to look before sending', () => {
-    const notice = sendFeedbackNotice({ ...draft, attachment: 'data:image/png;base64,AAAA' }, null)
+    const notice = sendFeedbackNotice({ ...draft, attachments: ['data:image/png;base64,AAAA'] }, null)
     expect(notice.detail).toContain('The image you pasted')
+  })
+
+  it('counts several images rather than listing them one by one', () => {
+    const three = Array.from({ length: 3 }, () => 'data:image/png;base64,AAAA')
+    expect(sendFeedbackNotice({ ...draft, attachments: three }, null).detail).toContain(
+      'The 3 images you pasted',
+    )
   })
 
   it('spells out every diagnostics line rather than summarising them', () => {

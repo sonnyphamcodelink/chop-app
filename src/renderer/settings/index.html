@@ -149,24 +149,23 @@
       }
       #feedback-message:focus-visible { outline: 2px solid var(--accent); outline-offset: -1px; }
       #feedback-paste-hint { margin-top: -6px; color: var(--muted); font-size: 12px; }
-      .attach {
-        display: flex; align-items: center; gap: 10px; padding: 8px 10px;
-        border: 1px solid var(--line); border-radius: 8px;
+      .thumbs { display: flex; gap: 8px; margin-top: -2px; }
+      .thumb { position: relative; flex: 0 0 auto; line-height: 0; }
+      .thumb img {
+        width: 72px; height: 48px; object-fit: cover;
+        border: 1px solid var(--line); border-radius: 6px; background: var(--field);
       }
-      #feedback-thumb {
-        flex: 0 0 auto; width: 46px; height: 32px; object-fit: cover;
-        border-radius: 4px; background: var(--field);
+      /* Sits on the corner of its own thumbnail, so three of them stay a strip
+         rather than three stacked rows the pane has no height for. */
+      .thumb button {
+        position: absolute; top: -6px; right: -6px; width: 18px; height: 18px;
+        display: flex; align-items: center; justify-content: center;
+        padding: 0; border: 1px solid var(--line); border-radius: 50%;
+        background: light-dark(#ffffff, #292c31); color: inherit;
+        font: 13px -apple-system, system-ui, sans-serif; line-height: 1; cursor: pointer;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
       }
-      .attach-copy { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-      .attach-copy small {
-        color: var(--muted); font-size: 12px;
-        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-      }
-      #feedback-image-remove {
-        flex: 0 0 auto; padding: 5px 12px; border: 1px solid var(--line); border-radius: 8px;
-        background: transparent; color: inherit; font: inherit; cursor: pointer;
-      }
-      #feedback-image-remove:hover { background: var(--field); }
+      .thumb button:hover { background: light-dark(#f2f6ff, #343941); }
       .diagnostics { display: flex; align-items: center; gap: 12px; color: var(--muted); }
       .check { display: flex; align-items: center; gap: 7px; cursor: pointer; }
       .diagnostics summary { cursor: pointer; color: var(--accent); }
@@ -302,14 +301,7 @@
           <label class="visually-hidden" for="feedback-message">Your feedback</label>
           <textarea id="feedback-message" rows="5" spellcheck="true"></textarea>
           <small id="feedback-paste-hint">Paste a screenshot straight into the box to send it along.</small>
-          <div id="feedback-image" class="attach" hidden>
-            <img id="feedback-thumb" alt="The image you pasted" />
-            <div class="attach-copy">
-              <strong>Image attached</strong>
-              <small id="feedback-image-detail"></small>
-            </div>
-            <button id="feedback-image-remove" type="button">Remove</button>
-          </div>
+          <div id="feedback-images" class="thumbs" hidden></div>
           <div class="diagnostics">
             <label class="check">
               <input id="feedback-diagnostics" type="checkbox" checked />
@@ -335,9 +327,9 @@
           </div>
         </div>
         <footer id="feedback-note">
-          Send asks you to confirm, and lists exactly what goes. A pasted image can
-          hold anything that was on your screen, so have a look at the thumbnail
-          before you confirm.
+          Send asks you to confirm, and lists exactly what goes. Pasted images are
+          shrunk before they travel. One can hold anything that was on your screen,
+          so have a look at the thumbnail before you confirm.
         </footer>
       </section>
     </main>

@@ -35,7 +35,8 @@ export function feedbackTranscript(
 ): string {
   const parts = [feedbackSubject(draft.kind), '', draft.message.trim()]
 
-  if (draft.attachment) parts.push('', '(an image is attached)')
+  const count = draft.attachments.length
+  if (count > 0) parts.push('', count === 1 ? '(1 image is attached)' : `(${count} images are attached)`)
   if (diagnostics) parts.push('', '--', ...diagnosticsLines(diagnostics))
 
   return parts.join('\n')

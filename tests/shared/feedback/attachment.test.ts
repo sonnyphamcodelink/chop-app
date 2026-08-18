@@ -2,8 +2,14 @@ import { describe, expect, it } from 'vitest'
 import {
   ATTACHMENT_MAX_BYTES,
   attachmentFileName,
+  attachmentProblem,
+  ATTACHMENTS_TOTAL_MAX_BYTES,
   formatBytes,
+  RAW_PASTE_MAX_BYTES,
+  MAX_ATTACHMENTS,
   parsePastedImage,
+  type PastedImage,
+  totalBytes,
 } from '../../../src/shared/feedback/attachment'
 
 const PNG_BASE64 =
@@ -72,14 +78,19 @@ describe('parsePastedImage', () => {
 
 describe('attachmentFileName', () => {
   it('names the file after the type it actually is', () => {
-    expect(attachmentFileName('image/png')).toBe('pasted-image.png')
-    expect(attachmentFileName('image/jpeg')).toBe('pasted-image.jpg')
-    expect(attachmentFileName('image/gif')).toBe('pasted-image.gif')
-    expect(attachmentFileName('image/webp')).toBe('pasted-image.webp')
+    expect(attachmentFileName('image/png', 0)).toBe('pasted-image-1.png')
+    expect(attachmentFileName('image/jpeg', 0)).toBe('pasted-image-1.jpg')
+    expect(attachmentFileName('image/gif', 0)).toBe('pasted-image-1.gif')
+    expect(attachmentFileName('image/webp', 0)).toBe('pasted-image-1.webp')
+  })
+
+  it('numbers the files from one, the way the thumbnails read', () => {
+    expect(attachmentFileName('image/png', 1)).toBe('pasted-image-2.png')
+    expect(attachmentFileName('image/png', 2)).toBe('pasted-image-3.png')
   })
 
   it('falls back to png for a type it does not know', () => {
-    expect(attachmentFileName('image/heic')).toBe('pasted-image.png')
+    expect(attachmentFileName('image/heic', 0)).toBe('pasted-image-1.png')
   })
 })
 
@@ -88,5 +99,77 @@ describe('formatBytes', () => {
     expect(formatBytes(512)).toBe('512 B')
     expect(formatBytes(2048)).toBe('2 KB')
     expect(formatBytes(1_500_000)).toBe('1.4 MB')
+  })
+})
+
+/** An image of a given decoded size, without building the base64 for it. */
+function sized(byteLength: number): PastedImage {
+  return { dataUrl: 'data:image/png;base64,AAAA', mediaType: 'image/png', byteLength }
+}
+
+describe('totalBytes', () => {
+  it('is zero for nothing attached', () => {
+    expect(totalBytes([])).toBe(0)
+  })
+
+  it('adds every image up', () => {
+    expect(totalBytes([sized(100), sized(250)])).toBe(350)
+  })
+})
+
+describe('attachmentProblem', () => {
+  it('lets the first image through', () => {
+    expect(attachmentProblem([], sized(1000))).toBeNull()
+  })
+
+  it('lets images through up to the limit', () => {
+    const existing = Array.from({ length: MAX_ATTACHMENTS - 1 }, () => sized(1000))
+    expect(attachmentProblem(existing, sized(1000))).toBeNull()
+  })
+
+  it('refuses one past the limit, and says how many are allowed', () => {
+    const full = Array.from({ length: MAX_ATTACHMENTS }, () => sized(1000))
+    expect(attachmentProblem(full, sized(1000))).toContain(String(MAX_ATTACHMENTS))
+  })
+
+  it('refuses an image that would take the set over the total cap', () => {
+    const existing = [sized(ATTACHMENTS_TOTAL_MAX_BYTES - 10)]
+    expect(attachmentProblem(existing, sized(11))).not.toBeNull()
+  })
+
+  it('allows a set that lands exactly on the total cap', () => {
+    const existing = [sized(ATTACHMENTS_TOTAL_MAX_BYTES - 10)]
+    expect(attachmentProblem(existing, sized(10))).toBeNull()
+  })
+
+  it('caps the total below what the per-image cap alone would allow', () => {
+    // Otherwise three full-size images could be posted, which no mailbox takes.
+    expect(ATTACHMENTS_TOTAL_MAX_BYTES).toBeLessThan(ATTACHMENT_MAX_BYTES * MAX_ATTACHMENTS)
+  })
+})
+
+describe('parsePastedImage size gate', () => {
+  it('measures against the default cap when none is given', () => {
+    expect(parsePastedImage(ofSize(ATTACHMENT_MAX_BYTES + 3))).toBeNull()
+  })
+
+  it('takes a looser cap, for the gate that runs before an image is shrunk', () => {
+    const big = ofSize(ATTACHMENT_MAX_BYTES + 3)
+    expect(parsePastedImage(big, RAW_PASTE_MAX_BYTES)).not.toBeNull()
+  })
+
+  it('still refuses past the loose cap', () => {
+    // Built from the length rather than the bytes: 64 MB of base64 is not worth
+    // allocating to prove a comparison.
+    const payload = 'A'.repeat((RAW_PASTE_MAX_BYTES / 3 + 4) * 4)
+    expect(parsePastedImage(`data:image/png;base64,${payload}`, RAW_PASTE_MAX_BYTES)).toBeNull()
+  })
+
+  it('checks the media type whatever the cap', () => {
+    expect(parsePastedImage('data:text/html;base64,AAAA', RAW_PASTE_MAX_BYTES)).toBeNull()
+  })
+
+  it('leaves the loose gate well above the strict one', () => {
+    expect(RAW_PASTE_MAX_BYTES).toBeGreaterThan(ATTACHMENT_MAX_BYTES)
   })
 })

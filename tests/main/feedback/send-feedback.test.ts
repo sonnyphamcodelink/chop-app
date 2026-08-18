@@ -14,7 +14,7 @@ const draft: FeedbackDraft = {
   kind: 'idea',
   message: 'A filmstrip search box would help.',
   includeDiagnostics: true,
-  attachment: null,
+  attachments: [],
 }
 
 const diagnostics: FeedbackDiagnostics = {
@@ -39,14 +39,14 @@ function recorder(status = 200): { fetch: typeof fetch; body(): FormData } {
 describe('postFeedback', () => {
   it('reports a send on a 2xx', async () => {
     const { fetch } = recorder()
-    expect(await postFeedback({ draft, diagnostics, image: null }, URL_OK, fetch)).toEqual({
+    expect(await postFeedback({ draft, diagnostics, images: [] }, URL_OK, fetch)).toEqual({
       status: 'sent',
     })
   })
 
   it('sends the kind and the message', async () => {
     const { fetch, body } = recorder()
-    await postFeedback({ draft, diagnostics: null, image: null }, URL_OK, fetch)
+    await postFeedback({ draft, diagnostics: null, images: [] }, URL_OK, fetch)
 
     expect(body().get('kind')).toBe('idea')
     expect(body().get('message')).toBe('A filmstrip search box would help.')
@@ -54,14 +54,14 @@ describe('postFeedback', () => {
 
   it('omits diagnostics entirely when the user turned them off', async () => {
     const { fetch, body } = recorder()
-    await postFeedback({ draft, diagnostics: null, image: null }, URL_OK, fetch)
+    await postFeedback({ draft, diagnostics: null, images: [] }, URL_OK, fetch)
 
     expect(body().has('diagnostics')).toBe(false)
   })
 
   it('sends diagnostics as JSON when they are on', async () => {
     const { fetch, body } = recorder()
-    await postFeedback({ draft, diagnostics, image: null }, URL_OK, fetch)
+    await postFeedback({ draft, diagnostics, images: [] }, URL_OK, fetch)
 
     expect(JSON.parse(String(body().get('diagnostics')))).toEqual(diagnostics)
   })
@@ -69,10 +69,10 @@ describe('postFeedback', () => {
   it('attaches the pasted image, decoded, under a name of its own', async () => {
     const { fetch, body } = recorder()
     const image = parsePastedImage(PNG_DATA_URL)!
-    await postFeedback({ draft, diagnostics: null, image }, URL_OK, fetch)
+    await postFeedback({ draft, diagnostics: null, images: [image] }, URL_OK, fetch)
 
     const file = body().get('capture') as File
-    expect(file.name).toBe('pasted-image.png')
+    expect(file.name).toBe('pasted-image-1.png')
     expect(file.type).toBe('image/png')
     // Decoded bytes, not the base64 text that arrived.
     expect(file.size).toBe(Buffer.from(PNG_BASE64, 'base64').byteLength)
@@ -81,31 +81,46 @@ describe('postFeedback', () => {
   it('names a JPEG by its own type', async () => {
     const { fetch, body } = recorder()
     const image = parsePastedImage(`data:image/jpeg;base64,${PNG_BASE64}`)!
-    await postFeedback({ draft, diagnostics: null, image }, URL_OK, fetch)
+    await postFeedback({ draft, diagnostics: null, images: [image] }, URL_OK, fetch)
 
-    expect((body().get('capture') as File).name).toBe('pasted-image.jpg')
+    expect((body().get('capture') as File).name).toBe('pasted-image-1.jpg')
+  })
+
+  it('repeats the capture field once per image, in the order they were pasted', async () => {
+    const { fetch, body } = recorder()
+    const png = parsePastedImage(PNG_DATA_URL)!
+    const jpeg = parsePastedImage(`data:image/jpeg;base64,${PNG_BASE64}`)!
+    await postFeedback({ draft, diagnostics: null, images: [png, jpeg, png] }, URL_OK, fetch)
+
+    const files = body().getAll('capture') as File[]
+    expect(files.map((file) => file.name)).toEqual([
+      'pasted-image-1.png',
+      'pasted-image-2.jpg',
+      'pasted-image-3.png',
+    ])
+    expect(files.map((file) => file.type)).toEqual(['image/png', 'image/jpeg', 'image/png'])
   })
 
   it('sends nothing under capture when nothing was pasted', async () => {
     const { fetch, body } = recorder()
-    await postFeedback({ draft, diagnostics: null, image: null }, URL_OK, fetch)
+    await postFeedback({ draft, diagnostics: null, images: [] }, URL_OK, fetch)
 
     expect(body().has('capture')).toBe(false)
   })
 
-  it('tells the user to drop the image when the server refuses the size', async () => {
+  it('tells the user to drop an image when the server refuses the size', async () => {
     const { fetch } = recorder(413)
-    const result = await postFeedback({ draft, diagnostics, image: null }, URL_OK, fetch)
+    const result = await postFeedback({ draft, diagnostics, images: [] }, URL_OK, fetch)
 
     expect(result).toEqual({
       status: 'failed',
-      reason: 'That was too large to accept. Try again without the image.',
+      reason: 'That was too large to accept. Try again with fewer images.',
     })
   })
 
   it('reports any other refusal with its status', async () => {
     const { fetch } = recorder(500)
-    const result = await postFeedback({ draft, diagnostics, image: null }, URL_OK, fetch)
+    const result = await postFeedback({ draft, diagnostics, images: [] }, URL_OK, fetch)
 
     expect(result).toEqual({ status: 'failed', reason: 'The feedback server answered 500.' })
   })
@@ -115,14 +130,14 @@ describe('postFeedback', () => {
       throw new Error('getaddrinfo ENOTFOUND')
     }) as unknown as typeof fetch
 
-    const result = await postFeedback({ draft, diagnostics, image: null }, URL_OK, failing)
+    const result = await postFeedback({ draft, diagnostics, images: [] }, URL_OK, failing)
     expect(result.status).toBe('failed')
   })
 
   it('refuses to post anywhere that is not https', async () => {
     const { fetch } = recorder()
     const result = await postFeedback(
-      { draft, diagnostics, image: null },
+      { draft, diagnostics, images: [] },
       'http://example.com/feedback',
       fetch,
     )

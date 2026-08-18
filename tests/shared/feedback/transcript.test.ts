@@ -20,7 +20,7 @@ const draft: FeedbackDraft = {
   kind: 'problem',
   message: 'Crops are off by a pixel.',
   includeDiagnostics: true,
-  attachment: null,
+  attachments: [],
 }
 
 describe('diagnosticsLines', () => {
@@ -63,9 +63,16 @@ describe('feedbackTranscript', () => {
     for (const line of diagnosticsLines(diagnostics)) expect(text).toContain(line)
   })
 
-  it('mentions an attachment so the reader knows to look for it', () => {
-    const text = feedbackTranscript({ ...draft, attachment: 'data:image/png;base64,AAAA' }, null)
-    expect(text).toContain('an image is attached')
+  it('mentions one attachment so the reader knows to look for it', () => {
+    const text = feedbackTranscript({ ...draft, attachments: ['data:image/png;base64,AAAA'] }, null)
+    expect(text).toContain('1 image is attached')
+  })
+
+  it('counts several attachments rather than repeating itself', () => {
+    const three = Array.from({ length: 3 }, () => 'data:image/png;base64,AAAA')
+    expect(feedbackTranscript({ ...draft, attachments: three }, null)).toContain(
+      '3 images are attached',
+    )
   })
 
   it('does not mention an attachment when there is none', () => {

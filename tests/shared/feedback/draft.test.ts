@@ -6,13 +6,14 @@ import {
   messageProblem,
   parseDraft,
 } from '../../../src/shared/feedback/draft'
+import { MAX_ATTACHMENTS } from '../../../src/shared/feedback/attachment'
 import { isFeedbackKind } from '../../../src/shared/feedback/types'
 
 const draft = {
   kind: 'idea',
   message: 'A filmstrip search box would help.',
   includeDiagnostics: true,
-  attachment: null,
+  attachments: [],
 }
 
 describe('messageProblem', () => {
@@ -60,13 +61,24 @@ describe('parseDraft', () => {
       kind: 'idea',
       message: 'Hello',
       includeDiagnostics: true,
-      attachment: null,
+      attachments: [],
     })
   })
 
-  it('keeps a pasted image through', () => {
-    const dataUrl = 'data:image/png;base64,AAAA'
-    expect(parseDraft({ ...draft, attachment: dataUrl })?.attachment).toBe(dataUrl)
+  it('keeps the pasted images through, in order', () => {
+    const one = 'data:image/png;base64,AAAA'
+    const two = 'data:image/png;base64,BBBB'
+    expect(parseDraft({ ...draft, attachments: [one, two] })?.attachments).toEqual([one, two])
+  })
+
+  it('refuses more images than Chop sends', () => {
+    const many = Array.from({ length: MAX_ATTACHMENTS + 1 }, () => 'data:image/png;base64,AAAA')
+    expect(parseDraft({ ...draft, attachments: many })).toBeNull()
+  })
+
+  it('accepts exactly the limit', () => {
+    const full = Array.from({ length: MAX_ATTACHMENTS }, () => 'data:image/png;base64,AAAA')
+    expect(parseDraft({ ...draft, attachments: full })?.attachments).toHaveLength(MAX_ATTACHMENTS)
   })
 
   it('refuses anything that is not an object', () => {
@@ -87,7 +99,9 @@ describe('parseDraft', () => {
     expect(parseDraft({ ...draft, includeDiagnostics: 'yes' })).toBeNull()
   })
 
-  it('refuses an attachment that is not a string or null', () => {
-    expect(parseDraft({ ...draft, attachment: 7 })).toBeNull()
+  it('refuses attachments that are not a list of strings', () => {
+    expect(parseDraft({ ...draft, attachments: 7 })).toBeNull()
+    expect(parseDraft({ ...draft, attachments: null })).toBeNull()
+    expect(parseDraft({ ...draft, attachments: [7] })).toBeNull()
   })
 })

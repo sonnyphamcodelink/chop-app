@@ -36,10 +36,11 @@ export type FeedbackDraft = {
   readonly message: string
   readonly includeDiagnostics: boolean
   /**
-   * A pasted image as a data URL, or null. It comes from the clipboard rather
-   * than from disk, so there is no file for main to read on its own.
+   * Pasted images as data URLs, newest last, capped at MAX_ATTACHMENTS. They
+   * come from the clipboard rather than from disk, so there is no file for main
+   * to read on its own.
    */
-  readonly attachment: string | null
+  readonly attachments: readonly string[]
 }
 
 /**

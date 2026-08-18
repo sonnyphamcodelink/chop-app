@@ -15,8 +15,8 @@ export type FeedbackSubmission = {
   readonly draft: FeedbackDraft
   /** Null when the user turned diagnostics off; nothing stands in for them. */
   readonly diagnostics: FeedbackDiagnostics | null
-  /** Already checked against the allowed types and the size cap. */
-  readonly image: PastedImage | null
+  /** Already checked against the allowed types, the count and the size caps. */
+  readonly images: readonly PastedImage[]
 }
 
 const UNREACHABLE = 'Chop could not reach the feedback server.'
@@ -35,14 +35,15 @@ function buildBody(submission: FeedbackSubmission): FormData {
   if (submission.diagnostics) {
     body.set('diagnostics', JSON.stringify(submission.diagnostics))
   }
-  if (submission.image) {
-    const { mediaType } = submission.image
-    body.set(
+  // Repeated rather than indexed: `capture` appearing several times is what
+  // every multipart parser already reads as a list.
+  submission.images.forEach((image, index) => {
+    body.append(
       'capture',
-      new Blob([imageBytes(submission.image)], { type: mediaType }),
-      attachmentFileName(mediaType),
+      new Blob([imageBytes(image)], { type: image.mediaType }),
+      attachmentFileName(image.mediaType, index),
     )
-  }
+  })
   return body
 }
 
@@ -66,7 +67,7 @@ export async function postFeedback(
     if (response.status === 413) {
       return {
         status: 'failed',
-        reason: 'That was too large to accept. Try again without the image.',
+        reason: 'That was too large to accept. Try again with fewer images.',
       }
     }
     if (!response.ok) {

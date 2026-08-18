@@ -2,6 +2,7 @@
  * What counts as a sendable note. Kept here rather than in the pane so the
  * renderer and the main process agree on it without one trusting the other.
  */
+import { MAX_ATTACHMENTS } from './attachment'
 import { type FeedbackDraft, type FeedbackKind, isFeedbackKind } from './types'
 
 export const MESSAGE_MIN_LENGTH = 3
@@ -45,12 +46,14 @@ export function parseDraft(value: unknown): FeedbackDraft | null {
   if (!isFeedbackKind(raw.kind)) return null
   if (typeof raw.message !== 'string' || !isSendable(raw.message)) return null
   if (typeof raw.includeDiagnostics !== 'boolean') return null
-  if (raw.attachment !== null && typeof raw.attachment !== 'string') return null
+  if (!Array.isArray(raw.attachments)) return null
+  if (raw.attachments.length > MAX_ATTACHMENTS) return null
+  if (raw.attachments.some((item) => typeof item !== 'string')) return null
 
   return {
     kind: raw.kind,
     message: raw.message.trim(),
     includeDiagnostics: raw.includeDiagnostics,
-    attachment: raw.attachment,
+    attachments: raw.attachments as readonly string[],
   }
 }
