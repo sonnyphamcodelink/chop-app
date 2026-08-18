@@ -1,4 +1,5 @@
 import { app } from 'electron'
+import { showAboutChop } from './about'
 import { runCaptureFlow } from './capture/capture-flow'
 import { warmOverlays } from './capture/overlay-manager'
 import { getEditorWindow, sendCapture } from './editor-window'
@@ -53,6 +54,7 @@ if (!app.requestSingleInstanceLock()) {
         sendCapture
     }
     tray = createTray({
+      onAbout: showAboutChop,
       onCapture: () => void capture(),
       onOpenEditor: () => getEditorWindow().show(),
       onOpenSettings: () => openSettingsWindow(),
