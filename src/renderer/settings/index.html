@@ -15,7 +15,7 @@
       html, body { margin: 0; height: 100%; font: 13px -apple-system, system-ui, sans-serif; user-select: none; }
       body { display: flex; height: 100%; box-sizing: border-box; }
       nav {
-        flex: 0 0 148px;
+        flex: 0 0 220px;
         padding: 16px 10px;
         background: var(--sidebar);
         border-right: 1px solid var(--line);
@@ -36,6 +36,25 @@
       }
       nav button[aria-current="page"] { background: color-mix(in oklab, currentColor 12%, transparent); font-weight: 600; }
       nav button:hover { background: color-mix(in oklab, currentColor 8%, transparent); }
+      #update-ready {
+        margin-top: auto; padding: 12px; border: 1px solid var(--line); border-radius: 12px;
+        background: light-dark(#ffffff, #292c31);
+        border-color: light-dark(#c8cdd5, #555b65);
+        box-shadow:
+          0 2px 5px rgba(0, 0, 0, 0.1),
+          0 8px 20px rgba(0, 0, 0, 0.16);
+        display: grid; grid-template-columns: 30px 1fr; align-items: center; gap: 8px;
+      }
+      #update-ready:hover {
+        background: light-dark(#f2f6ff, #343941);
+        border-color: light-dark(#9fa8b6, #737b88);
+      }
+      #update-ready:disabled { opacity: .55; cursor: default; }
+      #update-ready[hidden] { display: none; }
+      .update-mark { font-size: 24px; line-height: 1; }
+      .update-copy { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+      .update-copy strong { font-size: 13px; white-space: nowrap; }
+      .update-copy small { color: var(--muted); font-size: 12px; }
       main { flex: 1; min-width: 0; display: flex; flex-direction: column; padding: 20px 24px; box-sizing: border-box; gap: 12px; }
       .pane { display: none; flex-direction: column; gap: 12px; flex: 1; min-height: 0; }
       .pane.active { display: flex; }
@@ -98,6 +117,76 @@
       }
       #license-status { margin: 0; min-height: 20px; line-height: 1.4; color: var(--muted); }
       #license-status.error { color: oklch(0.58 0.19 25); }
+      #feedback-form { display: flex; flex-direction: column; gap: 12px; }
+      .visually-hidden {
+        position: absolute; width: 1px; height: 1px; overflow: hidden;
+        clip-path: inset(50%); white-space: nowrap;
+      }
+      .segmented {
+        align-self: flex-start; display: flex; border: 1px solid var(--line);
+        border-radius: 8px; overflow: hidden;
+      }
+      .segmented button {
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 6px 14px; border: 0; background: transparent; color: var(--muted);
+        font: inherit; cursor: pointer;
+      }
+      .kind-icon {
+        width: 14px; height: 14px; flex: 0 0 auto; fill: none; stroke: currentColor;
+        stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round;
+      }
+      .segmented button + button { border-left: 1px solid var(--line); }
+      .segmented button:hover { background: var(--field); }
+      .segmented button[aria-checked="true"] {
+        background: color-mix(in oklab, var(--accent) 16%, transparent);
+        color: inherit; font-weight: 600;
+      }
+      #feedback-message {
+        width: 100%; box-sizing: border-box; resize: none; padding: 9px 11px;
+        border: 1px solid var(--line); border-radius: 8px; background: var(--field);
+        color: inherit; font: 13px -apple-system, system-ui, sans-serif;
+        line-height: 1.5; user-select: text;
+      }
+      #feedback-message:focus-visible { outline: 2px solid var(--accent); outline-offset: -1px; }
+      #feedback-paste-hint { margin-top: -6px; color: var(--muted); font-size: 12px; }
+      .attach {
+        display: flex; align-items: center; gap: 10px; padding: 8px 10px;
+        border: 1px solid var(--line); border-radius: 8px;
+      }
+      #feedback-thumb {
+        flex: 0 0 auto; width: 46px; height: 32px; object-fit: cover;
+        border-radius: 4px; background: var(--field);
+      }
+      .attach-copy { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+      .attach-copy small {
+        color: var(--muted); font-size: 12px;
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      }
+      #feedback-image-remove {
+        flex: 0 0 auto; padding: 5px 12px; border: 1px solid var(--line); border-radius: 8px;
+        background: transparent; color: inherit; font: inherit; cursor: pointer;
+      }
+      #feedback-image-remove:hover { background: var(--field); }
+      .diagnostics { display: flex; align-items: center; gap: 12px; color: var(--muted); }
+      .check { display: flex; align-items: center; gap: 7px; cursor: pointer; }
+      .diagnostics summary { cursor: pointer; color: var(--accent); }
+      /* Open, the list has to sit under the row rather than stretch it, so the
+         disclosure never shoves the Send button off the pane. */
+      #feedback-included { position: relative; }
+      #feedback-included ul {
+        position: absolute; z-index: 1; top: 100%; left: 0; margin: 6px 0 0;
+        padding: 8px 10px 8px 26px; border: 1px solid var(--line); border-radius: 8px;
+        background: light-dark(#ffffff, #292c31); box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+        line-height: 1.6; white-space: nowrap; user-select: text;
+      }
+      #feedback-status { margin: 0; min-height: 20px; line-height: 1.4; color: var(--muted); }
+      #feedback-status.error { color: oklch(0.58 0.19 25); }
+      #feedback-sent .actions { margin-top: 6px; }
+      #feedback-sent button {
+        padding: 6px 12px; border: 1px solid var(--line); border-radius: 8px;
+        background: transparent; color: inherit; font: inherit; cursor: pointer;
+      }
+      #feedback-sent button:hover { background: var(--field); }
       footer { margin-top: auto; padding-top: 12px; border-top: 1px solid var(--line); color: var(--muted); line-height: 1.4; }
       #login-note { margin: 0; color: var(--muted); line-height: 1.4; }
       .switch {
@@ -122,6 +211,14 @@
       <button type="button" data-pane="general" aria-current="page">General</button>
       <button type="button" data-pane="shortcuts">Shortcuts</button>
       <button type="button" data-pane="license">License</button>
+      <button type="button" data-pane="feedback">Feedback</button>
+      <button id="update-ready" type="button" hidden>
+        <span class="update-mark" aria-hidden="true">↻</span>
+        <span class="update-copy">
+          <strong>Relaunch to update</strong>
+          <small id="update-version"></small>
+        </span>
+      </button>
     </nav>
     <main>
       <section id="pane-general" class="pane active" aria-labelledby="general-title">
@@ -181,6 +278,66 @@
           Your key is checked on this Mac and never leaves it, so Chop keeps working
           offline. Keep the key with your receipt - it is what moves the licence to a
           new machine.
+        </footer>
+      </section>
+      <section id="pane-feedback" class="pane" aria-labelledby="feedback-title">
+        <h1 id="feedback-title">Feedback</h1>
+        <div id="feedback-form">
+          <div id="feedback-kind" class="segmented" role="radiogroup" aria-label="Kind of feedback">
+            <button type="button" role="radio" data-kind="idea" aria-checked="true">
+              <svg class="kind-icon" viewBox="0 0 16 16" aria-hidden="true">
+                <path d="M8 1.6a4 4 0 0 0-2.4 7.2c.4.3.6.7.6 1.1v.6h3.6v-.6c0-.4.2-.8.6-1.1A4 4 0 0 0 8 1.6Z" />
+                <path d="M6.4 12.6h3.2M6.9 14.3h2.2" />
+              </svg>
+              Idea
+            </button>
+            <button type="button" role="radio" data-kind="problem" aria-checked="false">
+              <svg class="kind-icon" viewBox="0 0 16 16" aria-hidden="true">
+                <path d="M8 2.2 1.6 13.4h12.8L8 2.2Z" />
+                <path d="M8 6.4v3.1M8 11.5h.01" />
+              </svg>
+              Problem
+            </button>
+          </div>
+          <label class="visually-hidden" for="feedback-message">Your feedback</label>
+          <textarea id="feedback-message" rows="5" spellcheck="true"></textarea>
+          <small id="feedback-paste-hint">Paste a screenshot straight into the box to send it along.</small>
+          <div id="feedback-image" class="attach" hidden>
+            <img id="feedback-thumb" alt="The image you pasted" />
+            <div class="attach-copy">
+              <strong>Image attached</strong>
+              <small id="feedback-image-detail"></small>
+            </div>
+            <button id="feedback-image-remove" type="button">Remove</button>
+          </div>
+          <div class="diagnostics">
+            <label class="check">
+              <input id="feedback-diagnostics" type="checkbox" checked />
+              <span>Include app version and system info</span>
+            </label>
+            <details id="feedback-included">
+              <summary>What's included</summary>
+              <ul id="feedback-included-list"></ul>
+            </details>
+          </div>
+          <div class="row actions">
+            <button id="feedback-send" type="button" class="primary">Send</button>
+            <button id="feedback-copy" type="button" hidden>Copy text</button>
+            <button id="feedback-email" type="button" hidden>Email instead</button>
+          </div>
+          <p id="feedback-status"></p>
+        </div>
+        <div id="feedback-sent" class="state good" role="status" hidden>
+          <strong>Thanks — that's through</strong>
+          <p>Every note gets read.</p>
+          <div class="row actions">
+            <button id="feedback-again" type="button">Send another</button>
+          </div>
+        </div>
+        <footer id="feedback-note">
+          Send asks you to confirm, and lists exactly what goes. A pasted image can
+          hold anything that was on your screen, so have a look at the thumbnail
+          before you confirm.
         </footer>
       </section>
     </main>

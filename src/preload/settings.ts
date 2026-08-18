@@ -7,7 +7,13 @@ import {
   type ShortcutInfo,
   type ShortcutUpdate,
 } from '@shared/ipc'
+import type {
+  FeedbackContext,
+  FeedbackDraft,
+  FeedbackResult,
+} from '@shared/feedback/types'
 import type { ActivationResult, DeactivationResult, LicenseView } from '@shared/license/view'
+import type { BackgroundUpdateState } from '@shared/update'
 
 contextBridge.exposeInMainWorld('chopSettings', {
   platform: process.platform,
@@ -37,6 +43,26 @@ contextBridge.exposeInMainWorld('chopSettings', {
   },
   openPurchasePage(): Promise<void> {
     return ipcRenderer.invoke(CHANNELS.openPurchasePage) as Promise<void>
+  },
+  getFeedbackContext(): Promise<FeedbackContext> {
+    return ipcRenderer.invoke(CHANNELS.getFeedbackContext) as Promise<FeedbackContext>
+  },
+  sendFeedback(draft: FeedbackDraft): Promise<FeedbackResult> {
+    return ipcRenderer.invoke(CHANNELS.sendFeedback, draft) as Promise<FeedbackResult>
+  },
+  emailFeedback(draft: FeedbackDraft): Promise<boolean> {
+    return ipcRenderer.invoke(CHANNELS.emailFeedback, draft) as Promise<boolean>
+  },
+  getUpdateState(): Promise<BackgroundUpdateState> {
+    return ipcRenderer.invoke(CHANNELS.getUpdateState) as Promise<BackgroundUpdateState>
+  },
+  relaunchToUpdate(): Promise<boolean> {
+    return ipcRenderer.invoke(CHANNELS.relaunchToUpdate) as Promise<boolean>
+  },
+  onUpdateStateChanged(listener: (state: BackgroundUpdateState) => void): void {
+    ipcRenderer.on(CHANNELS.updateStateChanged, (_event, state: BackgroundUpdateState) => {
+      listener(state)
+    })
   },
   /** Fires when the licence changes anywhere, including in another window. */
   onLicenseChanged(listener: (view: LicenseView) => void): void {

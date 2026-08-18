@@ -1,5 +1,6 @@
 import { execFile as execFileCallback, spawn } from 'node:child_process'
 import { lstat, mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
+import { rmSync } from 'node:fs'
 import { basename, dirname, join, resolve, sep } from 'node:path'
 import { promisify } from 'node:util'
 
@@ -8,8 +9,10 @@ const execFile = promisify(execFileCallback)
 export type PreparedMacUpdate = {
   /** Starts the detached swap helper. The caller should quit immediately after this resolves. */
   readonly launchReplacement: () => Promise<void>
-  /** Unmounts and removes staged files if handoff cannot be completed. */
+  /** Removes staged files if handoff is no longer wanted. */
   readonly discard: () => Promise<void>
+  /** Synchronous cleanup used when Chop quits without installing. */
+  readonly discardSync: () => void
 }
 
 export function installedAppPath(execPath: string): string | null {
@@ -34,9 +37,7 @@ pid="$1"
 staged_app="$2"
 target_app="$3"
 stage_dir="$4"
-mount_point="$5"
-working_dir="$6"
-log_file="$7"
+log_file="$5"
 backup_app="$stage_dir/previous.app"
 
 exec >>"$log_file" 2>&1
@@ -45,22 +46,20 @@ while /bin/kill -0 "$pid" 2>/dev/null; do /bin/sleep 0.2; done
 
 if ! /bin/mv "$target_app" "$backup_app"; then
   echo "Could not move the installed app aside"
-  /usr/bin/hdiutil detach "$mount_point" -quiet || true
+  /usr/bin/open "$target_app" || true
   exit 1
 fi
 
 if ! /bin/mv "$staged_app" "$target_app"; then
   echo "Could not move the update into place; restoring the previous app"
   /bin/mv "$backup_app" "$target_app" || true
-  /usr/bin/hdiutil detach "$mount_point" -quiet || true
   /usr/bin/open "$target_app" || true
   exit 1
 fi
 
 echo "Update installed; reopening Chop"
-/usr/bin/hdiutil detach "$mount_point" -quiet || true
 /usr/bin/open "$target_app"
-/bin/rm -rf "$backup_app" "$stage_dir" "$working_dir"
+/bin/rm -rf "$backup_app" "$stage_dir"
 `
 
 async function plistValue(appPath: string, key: string): Promise<string> {
@@ -70,7 +69,7 @@ async function plistValue(appPath: string, key: string): Promise<string> {
 }
 
 async function detach(mountPoint: string): Promise<void> {
-  await execFile('/usr/bin/hdiutil', ['detach', mountPoint, '-quiet']).catch(() => undefined)
+  await execFile('/usr/bin/hdiutil', ['detach', mountPoint, '-quiet'])
 }
 
 /**
@@ -134,14 +133,16 @@ export async function prepareMacUpdate(
     const stagedApp = join(stageDirectory, 'Chop.app')
     await execFile('/usr/bin/ditto', [sourceApp, stagedApp])
 
-    const scriptPath = join(workingDirectory, 'replace.sh')
+    const scriptPath = join(stageDirectory, 'replace.sh')
     const logFile = join(logsDirectory, 'update.log')
     await writeFile(scriptPath, REPLACEMENT_SCRIPT, { mode: 0o700 })
 
+    await detach(mountPoint)
+    mounted = false
+    await rm(workingDirectory, { recursive: true, force: true })
+
     const discard = async (): Promise<void> => {
-      await detach(mountPoint)
       await rm(stageDirectory as string, { recursive: true, force: true })
-      await rm(workingDirectory, { recursive: true, force: true })
     }
 
     return {
@@ -155,8 +156,6 @@ export async function prepareMacUpdate(
               stagedApp,
               targetApp,
               stageDirectory as string,
-              mountPoint,
-              workingDirectory,
               logFile,
             ],
             { detached: true, stdio: 'ignore' },
@@ -168,9 +167,10 @@ export async function prepareMacUpdate(
           })
         }),
       discard,
+      discardSync: () => rmSync(stageDirectory as string, { recursive: true, force: true }),
     }
   } catch (error) {
-    if (mounted) await detach(mountPoint)
+    if (mounted) await detach(mountPoint).catch(() => undefined)
     if (stageDirectory) await rm(stageDirectory, { recursive: true, force: true })
     await rm(workingDirectory, { recursive: true, force: true })
     throw error

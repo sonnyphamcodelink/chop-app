@@ -36,6 +36,7 @@ let shortcut = 'CommandOrControl+Shift+2'
 let aboutOpened = 0
 let settingsOpened = 0
 let licenseOpened = 0
+let feedbackOpened = 0
 let status: LicenseStatus = { kind: 'licensed', claims: SAMPLE_CLAIMS }
 
 function build(): { refresh(): void } {
@@ -45,6 +46,7 @@ function build(): { refresh(): void } {
     onOpenEditor: () => {},
     onOpenSettings: () => void (settingsOpened += 1),
     onOpenLicense: () => void (licenseOpened += 1),
+    onSendFeedback: () => void (feedbackOpened += 1),
     onCheckForUpdates: () => {},
     captureShortcut: () => shortcut,
     captureRoot: () => '/captures',
@@ -58,6 +60,7 @@ beforeEach(() => {
   aboutOpened = 0
   settingsOpened = 0
   licenseOpened = 0
+  feedbackOpened = 0
   status = { kind: 'licensed', claims: SAMPLE_CLAIMS }
 })
 
@@ -79,6 +82,7 @@ describe('createTray', () => {
       undefined, // separator
       'Open Captures Folder',
       'Settings…',
+      'Send Feedback…',
       undefined, // separator
       'Licensed',
       undefined, // separator
@@ -145,5 +149,12 @@ describe('createTray', () => {
     expect(menu[0]?.label).toBe('About Chop')
     menu[0]?.click?.()
     expect(aboutOpened).toBe(1)
+  })
+
+  it('offers feedback whatever the licence state', () => {
+    status = { kind: 'trial-expired', endsAt: '2026-08-01T00:00:00.000Z' }
+    build()
+    ;(menus[0] ?? []).find((entry) => entry.label === 'Send Feedback…')?.click?.()
+    expect(feedbackOpened).toBe(1)
   })
 })

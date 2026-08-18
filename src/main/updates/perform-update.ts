@@ -5,17 +5,23 @@ import { join } from 'node:path'
 import { downloadUpdate } from './download-update'
 import { prepareMacUpdate, type PreparedMacUpdate } from './install-macos'
 import type { UpdateStatus } from './update-status'
-import { openUpdateWindow } from './update-window'
 
 type AvailableUpdate = Extract<UpdateStatus, { readonly kind: 'update-available' }>
 
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
+export type PreparationProgress =
+  | { readonly phase: 'downloading'; readonly percent: number }
+  | { readonly phase: 'preparing' }
+
+export type PrepareOptions = {
+  readonly onProgress: (progress: PreparationProgress) => void
+  readonly signal: AbortSignal
 }
 
-export async function downloadAndInstallUpdate(update: AvailableUpdate): Promise<void> {
-  const abort = new AbortController()
-  const window = openUpdateWindow(update.tag, () => abort.abort())
+/** Downloads, verifies, and stages an update without interrupting the running app. */
+export async function downloadAndPrepareUpdate(
+  update: AvailableUpdate,
+  { onProgress, signal }: PrepareOptions,
+): Promise<PreparedMacUpdate> {
   let lastPercent = -1
   let prepared: PreparedMacUpdate | null = null
   let workingDirectory: string | null = null
@@ -24,20 +30,15 @@ export async function downloadAndInstallUpdate(update: AvailableUpdate): Promise
     workingDirectory = await mkdtemp(join(tmpdir(), 'chop-update-'))
     const dmgPath = join(workingDirectory, update.asset.name)
     await downloadUpdate(update.asset, dmgPath, {
-      signal: abort.signal,
+      signal,
       onProgress: (progress) => {
         if (progress.percent === lastPercent) return
         lastPercent = progress.percent
-        window.send({ phase: 'downloading', tag: update.tag, ...progress })
+        onProgress({ phase: 'downloading', percent: progress.percent })
       },
     })
-    abort.signal.throwIfAborted()
 
-    window.send({
-      phase: 'preparing',
-      tag: update.tag,
-      message: 'The download is verified. Chop is preparing the replacement and will reopen shortly.',
-    })
+    onProgress({ phase: 'preparing' })
     prepared = await prepareMacUpdate(
       dmgPath,
       update.tag,
@@ -46,14 +47,10 @@ export async function downloadAndInstallUpdate(update: AvailableUpdate): Promise
       app.getPath('logs'),
       workingDirectory,
     )
-    await prepared.launchReplacement()
-    window.allowAppQuit()
-    app.quit()
+    return prepared
   } catch (error) {
     if (prepared) await prepared.discard()
     else if (workingDirectory) await rm(workingDirectory, { recursive: true, force: true })
-    if (abort.signal.aborted) return
-    console.error('Update installation failed:', error)
-    window.send({ phase: 'failed', tag: update.tag, message: errorMessage(error) })
+    throw error
   }
 }

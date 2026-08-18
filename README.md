@@ -84,10 +84,10 @@ certificate and notarization, which is a separate piece of work from this one.
 
 Chop checks for a newer version at launch and from the tray's
 **Check for Updates…**. When one is available, Chop downloads the installer in
-an in-app progress window, verifies its size and GitHub-provided SHA-256 digest,
-stages the matching Apple Silicon or Intel build, then quits, replaces the
-installed app, and reopens it. Closing the progress window cancels the download
-without touching the installed version.
+the background, verifies its size and GitHub-provided SHA-256 digest, and stages
+the matching Apple Silicon or Intel build without interrupting startup. Once it
+is ready, Settings and the main editor show **Relaunch to Update**. That explicit action
+quits Chop, atomically replaces the installed app, and reopens it.
 
 Automatic replacement requires Chop to be installed as `Chop.app` on a writable
 local volume. A copy launched directly from the DMG or through macOS App
@@ -119,6 +119,40 @@ That is what makes its Download button download the file rather than send
 someone to GitHub — so renaming an artifact silently breaks it. The site's
 `npm run check:downloads` asks GitHub whether these names really exist, and
 fails its build when one is missing.
+
+## Feedback
+
+Tray "Send Feedback…" and the Feedback pane in Settings post a note — an idea or
+a problem — to `FEEDBACK_URL` in `src/main/feedback/endpoint.ts`. Change that to
+your own endpoint before shipping. It takes a `multipart/form-data` POST:
+
+    kind          "idea" or "problem"
+    message       the note
+    diagnostics   JSON: version, OS, arch, display count, licence kind
+    capture       optional image the user pasted into the message box
+
+Anything that accepts a form post works — a Cloudflare Worker forwarding to
+email, or straight into an issue tracker. It is unauthenticated by design, so
+rate-limit it on the server; nothing in the app can stop someone posting to it
+directly.
+
+Pasting an image into the message box attaches it. It arrives from the clipboard
+rather than from disk, so the bytes cross the IPC boundary and are checked in
+`src/shared/feedback/attachment.ts` before anything is sent: PNG, JPEG, GIF or
+WebP, under the size cap, and real base64. Anything else is refused rather than
+repaired.
+
+Nothing is posted until the user confirms. Send raises a sheet that lists what is
+actually going — the message, the image if there is one, and each diagnostics
+line spelled out — because a pasted screenshot can hold anything that was on
+screen and that dialog is the last place anyone can look. Backing out is its own
+outcome, not a failure. Diagnostics carry the licence *kind* only, never the key
+and never the buyer's email.
+
+Chop is offline-first, so sends fail. A failed send keeps the note on screen and
+offers Copy text and Email instead; the latter goes to `FEEDBACK_EMAIL` in the
+same file. Drafts survive the settings window being closed — the text, not the
+image, which would eat the storage quota.
 
 ## Develop
 

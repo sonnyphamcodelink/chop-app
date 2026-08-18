@@ -5,6 +5,7 @@ import { warmOverlays } from './capture/overlay-manager'
 import { getEditorWindow, sendCapture } from './editor-window'
 import { captureShortcut, registerHotkeys, unregisterHotkeys } from './hotkeys'
 import { registerEditorHandlers } from './ipc/editor-handlers'
+import { registerFeedbackHandlers } from './ipc/feedback-handlers'
 import { registerLicenseHandlers } from './ipc/license-handlers'
 import { registerSettingsHandlers } from './ipc/settings-handlers'
 import { currentLicenseStatus, startTrialIfNeeded } from './license'
@@ -13,7 +14,11 @@ import { readSettings } from './settings-store'
 import { openSettingsWindow } from './settings-window'
 import { defaultCaptureRoot } from './storage/capture-root'
 import { createTray, type TrayController } from './tray'
-import { checkForUpdates } from './updates'
+import {
+  checkForUpdates,
+  discardPreparedUpdate,
+  registerUpdateHandlers,
+} from './updates'
 
 // Held at module scope so the tray is not garbage collected.
 let tray: TrayController | null = null
@@ -46,6 +51,8 @@ if (!app.requestSingleInstanceLock()) {
     registerSettingsHandlers(() => tray?.refresh())
     // The tray shows the licence state next to it.
     registerLicenseHandlers(() => tray?.refresh())
+    registerUpdateHandlers()
+    registerFeedbackHandlers()
 
     // E2E seam: the main bundle is a single file, so Playwright cannot import
     // sendCapture directly. Only exposed when a test capture root is set.
@@ -59,6 +66,7 @@ if (!app.requestSingleInstanceLock()) {
       onOpenEditor: () => getEditorWindow().show(),
       onOpenSettings: () => openSettingsWindow(),
       onOpenLicense: () => openSettingsWindow('license'),
+      onSendFeedback: () => openSettingsWindow('feedback'),
       onCheckForUpdates: () => void checkForUpdates({ silent: false }),
       captureShortcut,
       captureRoot: () => captureRoot,
@@ -71,7 +79,9 @@ if (!app.requestSingleInstanceLock()) {
     getEditorWindow()
 
     // A dev build always looks stale against the newest release, so it never asks.
-    if (app.isPackaged) void checkForUpdates({ silent: true })
+    if (app.isPackaged) {
+      setTimeout(() => void checkForUpdates({ silent: true }), 1500)
+    }
 
     app.on('activate', () => getEditorWindow().show())
   })
@@ -81,5 +91,8 @@ if (!app.requestSingleInstanceLock()) {
     if (process.platform !== 'darwin') app.quit()
   })
 
-  app.on('will-quit', unregisterHotkeys)
+  app.on('will-quit', () => {
+    unregisterHotkeys()
+    discardPreparedUpdate()
+  })
 }

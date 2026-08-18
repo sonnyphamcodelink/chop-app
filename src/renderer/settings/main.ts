@@ -7,10 +7,12 @@ import {
   type ShortcutInfo,
   type ShortcutUpdate,
 } from '@shared/ipc'
+import { initFeedbackPane, type FeedbackBridge } from './feedback'
 import { initLicensePane, type LicenseBridge } from './license'
 import { createRecorder } from './recorder'
+import type { BackgroundUpdateState } from '@shared/update'
 
-type SettingsBridge = LicenseBridge & {
+type SettingsBridge = LicenseBridge & FeedbackBridge & {
   platform: string
   getShortcut(): Promise<ShortcutInfo>
   setShortcut(accelerator: string): Promise<ShortcutUpdate>
@@ -18,6 +20,9 @@ type SettingsBridge = LicenseBridge & {
   getOpenAtLogin(): Promise<LoginItemState>
   setOpenAtLogin(enabled: boolean): Promise<LoginItemState>
   onShowPane(listener: (pane: SettingsPane) => void): void
+  getUpdateState(): Promise<BackgroundUpdateState>
+  relaunchToUpdate(): Promise<boolean>
+  onUpdateStateChanged(listener: (state: BackgroundUpdateState) => void): void
 }
 
 const bridge = (window as unknown as { chopSettings: SettingsBridge }).chopSettings
@@ -44,7 +49,33 @@ for (const button of navButtons) {
 // Main asks for a pane when it sends the user here, e.g. after a refused capture.
 bridge.onShowPane(showPane)
 
+const updateCard = document.querySelector<HTMLButtonElement>('#update-ready')!
+const updateVersion = document.querySelector<HTMLElement>('#update-version')!
+
+function showUpdateState(update: BackgroundUpdateState): void {
+  const ready = update.phase === 'ready'
+  updateCard.hidden = !ready
+  updateCard.disabled = false
+  if (ready) updateVersion.textContent = update.tag.replace(/^v/, '')
+}
+
+updateCard.addEventListener('click', () => {
+  updateCard.disabled = true
+  void bridge
+    .relaunchToUpdate()
+    .then((started) => {
+      if (!started) updateCard.disabled = false
+    })
+    .catch((error: unknown) => {
+      console.error('Could not relaunch to update.', error)
+      updateCard.disabled = false
+    })
+})
+bridge.onUpdateStateChanged(showUpdateState)
+void bridge.getUpdateState().then(showUpdateState).catch(console.error)
+
 initLicensePane(bridge)
+initFeedbackPane(bridge)
 
 const loginRow = document.querySelector<HTMLElement>('#login-row')!
 const loginNote = document.querySelector<HTMLParagraphElement>('#login-note')!

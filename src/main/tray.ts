@@ -16,6 +16,7 @@ export type TrayHandlers = {
   onOpenEditor(): void
   onOpenSettings(): void
   onOpenLicense(): void
+  onSendFeedback(): void
   onCheckForUpdates(): void
   /** Capture accelerator, read fresh each time the menu is built. */
   captureShortcut(): string
@@ -44,6 +45,9 @@ function buildMenu(handlers: TrayHandlers): Menu {
       click: () => void shell.openPath(handlers.captureRoot()),
     },
     { label: 'Settings…', click: handlers.onOpenSettings },
+    // Chop lives in the menu bar, so this is the one route into feedback that
+    // works without hunting for a window first.
+    { label: 'Send Feedback…', click: handlers.onSendFeedback },
     { type: 'separator' },
     { label: trayLicenseLabel(status), enabled: false },
     // Nothing to offer once a good key is installed; the pane is still in Settings.
