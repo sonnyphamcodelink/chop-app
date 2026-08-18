@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { fetchLatestRelease } from '../../../src/main/updates/fetch-release'
 
-const URL = 'https://api.github.com/repos/owner/repo/releases/latest'
+const URL = 'https://api.github.com/repos/owner/repo/releases?per_page=100'
 
 const respondWith = (status: number, body: unknown): typeof fetch =>
   (async () =>
@@ -13,22 +13,33 @@ const respondWith = (status: number, body: unknown): typeof fetch =>
 
 const published = {
   tag_name: 'v0.2.0',
-  html_url: 'https://github.com/owner/repo/releases/tag/v0.2.0',
+  html_url: 'https://github.com/sonnyphamcodelink/chop-releases/releases/tag/v0.2.0',
   draft: false,
   prerelease: false,
+  assets: [],
 }
 
 describe('fetchLatestRelease', () => {
   it('returns the parsed release on success', async () => {
-    const result = await fetchLatestRelease(URL, respondWith(200, published))
+    const result = await fetchLatestRelease(URL, respondWith(200, [published]))
 
-    expect(result).toEqual({ ok: true, release: { tag: 'v0.2.0', url: published.html_url } })
+    expect(result).toEqual({
+      ok: true,
+      release: { tag: 'v0.2.0', url: published.html_url, assets: [] },
+    })
   })
 
   it('explains a 404 as no release published yet', async () => {
     const result = await fetchLatestRelease(URL, respondWith(404, { message: 'Not Found' }))
 
     expect(result).toEqual({ ok: false, reason: 'No release has been published yet.' })
+  })
+
+  it('explains an empty release list', async () => {
+    await expect(fetchLatestRelease(URL, respondWith(200, []))).resolves.toEqual({
+      ok: false,
+      reason: 'No release has been published yet.',
+    })
   })
 
   it('reports the status code for other HTTP failures', async () => {
@@ -38,7 +49,7 @@ describe('fetchLatestRelease', () => {
   })
 
   it('rejects a well-formed response that is not a usable release', async () => {
-    const result = await fetchLatestRelease(URL, respondWith(200, { tag_name: 'v0.2.0' }))
+    const result = await fetchLatestRelease(URL, respondWith(200, [{ tag_name: 'v0.2.0' }]))
 
     expect(result).toEqual({
       ok: false,
@@ -61,7 +72,7 @@ describe('fetchLatestRelease', () => {
     const seen: string[] = []
     const recording = (async (url: string) => {
       seen.push(url)
-      return { ok: true, status: 200, json: async () => published } as Response
+      return { ok: true, status: 200, json: async () => [published] } as Response
     }) as unknown as typeof fetch
 
     await fetchLatestRelease(URL, recording)

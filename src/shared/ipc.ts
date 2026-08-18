@@ -49,6 +49,10 @@ export const CHANNELS = {
   licenseChanged: 'chop:license-changed',
   /** main → settings: bring a named pane forward */
   showSettingsPane: 'chop:show-settings-pane',
+  /** main → update window: download/install progress changed */
+  updateProgress: 'chop:update-progress',
+  /** update window → main: cancel the active download or close an error */
+  cancelUpdate: 'chop:cancel-update',
 } as const
 
 export type ChannelName = (typeof CHANNELS)[keyof typeof CHANNELS]

@@ -15,3 +15,6 @@
 - Wants all restyleable annotations (box, arrow, text, callout) to support recoloring after placement: selecting the object and clicking a toolbar color swatch should apply the color to that object as one undoable step, not just set a future default. Confidence: 0.8
 - Prefers implicit save-on-blur for text input fields: clicking outside an active text field (or otherwise moving focus away) should commit the entered text automatically rather than requiring an explicit Enter keypress. Confidence: 0.7
 - Requires custom cursors and dark UI elements to stay visible on dark/black capture backgrounds — dark elements need a light halo/outline beneath the dark core so they read on any background (reported as a bug: mouse hard to see when dragging over a black capture). Confidence: 0.85
+- Prefers in-app download/install flows with a visible progress bar and automatic replacement over redirecting the user to an external page (e.g., the GitHub release page). Confidence: 0.9
+- Wants destructive/irreversible UI actions (e.g., removing a license) to require an explicit confirmation step rather than applying immediately. Confidence: 0.8
+- Wants the app to auto-detect the user's OS and offer the correct installer/download path instead of making them choose manually. Confidence: 0.7

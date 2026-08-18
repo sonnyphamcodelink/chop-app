@@ -88,6 +88,14 @@ The dialog and the network call need a packaged build; `npm run dev` never check
 - [ ] Tray shows the running version, greyed out, above "Check for Updates…"
 - [ ] With no newer release, "Check for Updates…" reports Chop is up to date
 - [ ] With a newer release published, launching the app offers it unprompted
-- [ ] "Download" opens the release page in the browser; "Later" dismisses it
+- [ ] "Download and Install" opens an in-app progress window; no browser opens
+- [ ] Progress shows a percentage and downloaded/total megabytes, and the Dock
+      progress indicator follows it
+- [ ] Cancelling during download closes the updater and leaves the installed app unchanged
+- [ ] After download, the control disables while Chop verifies and stages the app
+- [ ] A completed update quits Chop, atomically replaces `Chop.app`, relaunches,
+      and reports the new version in the tray
+- [ ] Running from a DMG, App Translocation, or an unwritable folder fails visibly
+      without changing the installed app
 - [ ] Offline, "Check for Updates…" reports the failure instead of hanging or crashing
 - [ ] Before the first release exists, the check reports "No release has been published yet."

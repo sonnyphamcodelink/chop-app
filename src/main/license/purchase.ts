@@ -6,7 +6,7 @@
  * (manually, or from the store's purchase webhook) and deliver it in the
  * receipt.
  */
-export const PURCHASE_URL = 'https://example.com/chop'
+export const PURCHASE_URL = 'https://chop.asia/#pricing'
 
 /** Only https links are ever handed to the system browser. */
 export function isSafePurchaseUrl(url: string): boolean {

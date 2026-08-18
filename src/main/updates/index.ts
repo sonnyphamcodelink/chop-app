@@ -1,5 +1,6 @@
-import { app, dialog, shell } from 'electron'
+import { app, dialog } from 'electron'
 import { fetchLatestRelease } from './fetch-release'
+import { downloadAndInstallUpdate } from './perform-update'
 import { DOWNLOAD_BUTTON, type UpdateStatus, updateNotice, updateStatus } from './update-status'
 
 export type { UpdateStatus }
@@ -14,9 +15,8 @@ export type CheckOptions = {
 }
 
 /**
- * Compares the running version against the newest published release. Chop is
- * ad-hoc signed on macOS, which rules out installing an update in place, so the
- * most this can do is tell the user and open the download page for them.
+ * Compares the running version against the newest published release and offers
+ * to download, verify, stage, and replace the installed Mac application.
  */
 export async function checkForUpdates({ silent }: CheckOptions): Promise<UpdateStatus> {
   if (checking) return { kind: 'check-failed', reason: 'A check is already running.' }
@@ -33,7 +33,7 @@ export async function checkForUpdates({ silent }: CheckOptions): Promise<UpdateS
     const notice = updateNotice(status)
     const { response } = await dialog.showMessageBox({ ...notice, buttons: [...notice.buttons] })
     if (status.kind === 'update-available' && response === DOWNLOAD_BUTTON) {
-      await shell.openExternal(status.url)
+      await downloadAndInstallUpdate(status)
     }
     return status
   } finally {

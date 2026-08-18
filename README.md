@@ -83,9 +83,15 @@ certificate and notarization, which is a separate piece of work from this one.
 ## Updates
 
 Chop checks for a newer version at launch and from the tray's
-**Check for Updates…**, then points you at the release page. It does not install
-updates itself: the macOS build is ad-hoc signed, and Squirrel's in-place
-update requires a Developer ID signature.
+**Check for Updates…**. When one is available, Chop downloads the installer in
+an in-app progress window, verifies its size and GitHub-provided SHA-256 digest,
+stages the matching Apple Silicon or Intel build, then quits, replaces the
+installed app, and reopens it. Closing the progress window cancels the download
+without touching the installed version.
+
+Automatic replacement requires Chop to be installed as `Chop.app` on a writable
+local volume. A copy launched directly from the DMG or through macOS App
+Translocation must first be moved to Applications.
 
 Because this repo is private, release metadata lives in a separate public repo,
 `sonnyphamcodelink/chop-releases` — see `RELEASES_REPO` in
@@ -96,8 +102,23 @@ To publish a release:
 
 1. Bump `version` in `package.json` and commit it.
 2. `npm run package`
-3. Upload `release/Chop-<version>*.dmg` to a new release in the releases repo,
-   tagged `v<version>` — the tag is what the running app compares against.
+3. Upload the built artifacts to a new release in the releases repo, tagged
+   `v<version>` — the tag is what the running app compares against. GitHub must
+   report a SHA-256 digest for each asset; Chop refuses to install an asset
+   without one.
+
+Artifact names carry no version on purpose:
+
+    Chop-mac-arm64.dmg
+    Chop-mac-x64.dmg
+    Chop-win-x64.exe
+
+The landing page links at `releases/latest/download/<name>`, a permanent URL
+that resolves to whatever the newest release published under that exact name.
+That is what makes its Download button download the file rather than send
+someone to GitHub — so renaming an artifact silently breaks it. The site's
+`npm run check:downloads` asks GitHub whether these names really exist, and
+fails its build when one is missing.
 
 ## Develop
 

@@ -4,16 +4,28 @@ import { updateNotice, updateStatus } from '../../../src/main/updates/update-sta
 
 const feed = (tag: string): FeedResult => ({
   ok: true,
-  release: { tag, url: `https://github.com/sonnyphamcodelink/chop-releases/releases/tag/${tag}` },
+  release: {
+    tag,
+    url: `https://github.com/sonnyphamcodelink/chop-releases/releases/tag/${tag}`,
+    assets: [
+      {
+        name: 'Chop-mac-arm64.dmg',
+        url: `https://github.com/sonnyphamcodelink/chop-releases/releases/download/${tag}/Chop-mac-arm64.dmg`,
+        size: 120_000_000,
+        sha256: 'a'.repeat(64),
+      },
+    ],
+  },
 })
 
 describe('updateStatus', () => {
   it('reports an update when the release is ahead of the running version', () => {
-    expect(updateStatus('0.1.0', feed('v0.2.0'))).toEqual({
+    expect(updateStatus('0.1.0', feed('v0.2.0'), 'darwin', 'arm64')).toEqual({
       kind: 'update-available',
       current: '0.1.0',
       tag: 'v0.2.0',
       url: 'https://github.com/sonnyphamcodelink/chop-releases/releases/tag/v0.2.0',
+      asset: expect.objectContaining({ name: 'Chop-mac-arm64.dmg' }),
     })
   })
 
@@ -29,6 +41,13 @@ describe('updateStatus', () => {
     expect(updateStatus('0.1.0', feed('nightly')).kind).toBe('up-to-date')
   })
 
+  it('reports a newer release without an installer for this architecture', () => {
+    expect(updateStatus('0.1.0', feed('v0.2.0'), 'darwin', 'x64')).toEqual({
+      kind: 'check-failed',
+      reason: 'No update is available for darwin x64.',
+    })
+  })
+
   it('passes a feed failure through with its reason', () => {
     expect(updateStatus('0.1.0', { ok: false, reason: 'GitHub answered 500.' })).toEqual({
       kind: 'check-failed',
@@ -39,9 +58,9 @@ describe('updateStatus', () => {
 
 describe('updateNotice', () => {
   it('offers a download as the default button when an update exists', () => {
-    const notice = updateNotice(updateStatus('0.1.0', feed('v0.2.0')))
+    const notice = updateNotice(updateStatus('0.1.0', feed('v0.2.0'), 'darwin', 'arm64'))
 
-    expect(notice.buttons).toEqual(['Download', 'Later'])
+    expect(notice.buttons).toEqual(['Download and Install', 'Later'])
     expect(notice.defaultId).toBe(0)
     expect(notice.cancelId).toBe(1)
     expect(notice.message).toContain('v0.2.0')
