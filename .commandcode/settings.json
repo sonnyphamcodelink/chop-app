@@ -30,7 +30,8 @@
       "Shell(npm:*)",
       "Shell(./resources/windowlist:*)",
       "Shell(gh:*)",
-      "Shell(sw_vers:*)"
+      "Shell(sw_vers:*)",
+      "Shell(cmd:*)"
     ],
     "deny": [],
     "defaultMode": "default"

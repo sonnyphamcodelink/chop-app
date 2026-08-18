@@ -15,8 +15,8 @@ describe('Settings sidebar', () => {
     }
   })
 
-  it('lists License last, after the panes that were already there', () => {
-    expect(SETTINGS_PANES).toEqual(['general', 'shortcuts', 'license'])
+  it('lists the panes in the order the sidebar shows them', () => {
+    expect(SETTINGS_PANES).toEqual(['general', 'shortcuts', 'license', 'feedback'])
   })
 })
 

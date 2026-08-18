@@ -100,6 +100,39 @@
       .tb-weight.active, .tb-weight.active:hover { background: oklch(0.9 0.03 258); }
       .tb-dot { border-radius: 50%; background: oklch(0.45 0.01 250); }
       .tb-weight.active .tb-dot { background: var(--tb-accent); }
+      #editor-update-ready {
+        position: fixed;
+        right: 16px;
+        bottom: 106px;
+        z-index: 10;
+        min-width: 240px;
+        margin: 0;
+        padding: 10px 14px;
+        border: 1px solid light-dark(#c8cdd5, #555b65);
+        border-radius: 14px;
+        background: light-dark(#ffffff, #292c31);
+        color: inherit;
+        display: grid;
+        grid-template-columns: 34px 1fr;
+        align-items: center;
+        gap: 10px;
+        text-align: left;
+        font: inherit;
+        cursor: pointer;
+        box-shadow:
+          0 2px 5px rgba(0, 0, 0, 0.12),
+          0 10px 28px rgba(0, 0, 0, 0.2);
+      }
+      #editor-update-ready:hover {
+        background: light-dark(#f2f6ff, #343941);
+        border-color: light-dark(#9fa8b6, #737b88);
+      }
+      #editor-update-ready:disabled { opacity: 0.55; cursor: default; }
+      #editor-update-ready[hidden] { display: none; }
+      .editor-update-mark { font-size: 28px; line-height: 1; }
+      .editor-update-copy { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+      .editor-update-copy strong { font-size: 14px; white-space: nowrap; }
+      .editor-update-copy small { opacity: 0.58; font-size: 12px; }
       #stage {
         flex: 1 1 auto;
         display: grid;
@@ -202,6 +235,13 @@
       <textarea id="callout-input" rows="1" spellcheck="false"></textarea>
       <div id="empty">Press ⌘⇧2 to capture</div>
     </div>
+    <button id="editor-update-ready" type="button" hidden>
+      <span class="editor-update-mark" aria-hidden="true">↻</span>
+      <span class="editor-update-copy">
+        <strong>Relaunch to update</strong>
+        <small id="editor-update-version"></small>
+      </span>
+    </button>
     <div id="filmstrip"></div>
     <script type="module" src="./main.ts"></script>
   </body>

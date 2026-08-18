@@ -57,14 +57,15 @@ describe('updateStatus', () => {
 })
 
 describe('updateNotice', () => {
-  it('offers a download as the default button when an update exists', () => {
+  it('describes the silent background download when an update exists', () => {
     const notice = updateNotice(updateStatus('0.1.0', feed('v0.2.0'), 'darwin', 'arm64'))
 
-    expect(notice.buttons).toEqual(['Download and Install', 'Later'])
+    expect(notice.buttons).toEqual(['OK'])
     expect(notice.defaultId).toBe(0)
-    expect(notice.cancelId).toBe(1)
+    expect(notice.cancelId).toBe(0)
     expect(notice.message).toContain('v0.2.0')
     expect(notice.detail).toContain('0.1.0')
+    expect(notice.detail).toContain('background')
   })
 
   it('acknowledges an up-to-date app with a single button', () => {

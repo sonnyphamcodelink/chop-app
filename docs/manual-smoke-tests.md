@@ -23,7 +23,7 @@ These exercise platform code that cannot run in CI.
 - [ ] When macOS needs approval, the existing dialog appears; switch stays off until allowed
 - [ ] Tray menu does not list Open at Login
 - [ ] Shortcuts pane still shows and changes the Capture shortcut (see Capture shortcut below)
-- [ ] The sidebar lists General, Shortcuts and License, and each pane opens
+- [ ] The sidebar lists General, Shortcuts, License and Feedback, and each pane opens
 
 ## Licensing
 The trial clock and the blocking dialog need a real launch. `license.json` lives
@@ -72,6 +72,49 @@ installed app into each state, quitting Chop first:
 - [ ] A key with `--days 1`, backdated past its term, reports "Licence expired"
 - [ ] Editing past captures still works while capture is blocked
 
+## Feedback
+The send needs a real network and a real endpoint, so this cannot run in CI.
+Point `FEEDBACK_URL` in `src/main/feedback/endpoint.ts` at something you can
+watch — a request bin is enough — before starting.
+
+- [ ] Tray "Send Feedback…" opens Settings on the Feedback pane
+- [ ] Idea and Problem each show their own icon, and change the placeholder
+- [ ] Send with an empty box says "Add a few words first" and raises no dialog
+- [ ] "What's included" lists the running version, OS, display count and licence state
+- [ ] Unticking the box leaves diagnostics out of both the dialog and the request
+- [ ] Send raises a confirmation sheet listing the message and each diagnostics line
+- [ ] Cancelling the sheet posts nothing, shows no error, and keeps the note
+- [ ] Confirming posts, and the form is replaced by the thanks card
+- [ ] "Send another" clears the box, the image and the status
+
+Pasting images:
+
+- [ ] ⌘V with a screenshot on the clipboard shows a thumbnail
+- [ ] The size shown is the reduced one, well under what the PNG on the clipboard was
+- [ ] A full-screen Retina capture arrives at the endpoint as WebP, longest edge 2000
+- [ ] Text in the delivered image is still readable at 100%
+- [ ] A capture already under 2000px keeps its pixels but still shrinks in bytes
+- [ ] An animated GIF arrives still animated, not flattened to one frame
+- [ ] A capture too large to send as it arrived is accepted once reduced
+- [ ] The hint becomes a count and a total size, and says how many more fit
+- [ ] Pasting a second and third adds to the strip rather than replacing
+- [ ] A fourth paste is refused, naming the limit, and the first three survive
+- [ ] Pasting past 12 MB total is refused even when under three images
+- [ ] Each thumbnail's × removes only that one; the rest keep their order
+- [ ] The confirmation sheet names one image, or counts several
+- [ ] The posted request repeats `capture` once per image, decoded, in order
+- [ ] Files arrive named `pasted-image-1`, `-2`, `-3` with the right extensions
+- [ ] Pasting text still types into the box as normal
+- [ ] Pasting something that is not an image Chop sends is refused with a message
+- [ ] Typing, closing the window, and reopening restores the text but not the image
+- [ ] A sent note does not come back as a draft
+
+When it fails:
+
+- [ ] With the network off, the note stays on screen and Copy text / Email instead appear
+- [ ] "Copy text" puts the whole note on the clipboard, diagnostics included only if ticked
+- [ ] "Email instead" opens the mail client with the subject and body filled in
+
 ## Capture shortcut
 The global hotkey itself only registers with the OS in a running app.
 - [ ] Tray "Settings…" → Shortcuts shows the shortcut in force
@@ -84,17 +127,17 @@ The global hotkey itself only registers with the OS in a running app.
 - [ ] The editor's "Press … to capture" placeholder tracks the change without a relaunch
 
 ## Updates
-The dialog and the network call need a packaged build; `npm run dev` never checks.
+The background network call needs a packaged build; `npm run dev` never checks automatically.
 - [ ] Tray shows the running version, greyed out, above "Check for Updates…"
 - [ ] With no newer release, "Check for Updates…" reports Chop is up to date
-- [ ] With a newer release published, launching the app offers it unprompted
-- [ ] "Download and Install" opens an in-app progress window; no browser opens
-- [ ] Progress shows a percentage and downloaded/total megabytes, and the Dock
-      progress indicator follows it
-- [ ] Cancelling during download closes the updater and leaves the installed app unchanged
-- [ ] After download, the control disables while Chop verifies and stages the app
-- [ ] A completed update quits Chop, atomically replaces `Chop.app`, relaunches,
+- [ ] With a newer release published, startup opens normally with no update prompt
+- [ ] The newer release downloads, verifies, and stages silently in the background
+- [ ] Once staged, Settings shows a **Relaunch to update** card with the new version
+- [ ] Once staged, the main editor shows the same card at bottom-right, above the history strip
+- [ ] The tray continues to show only **Check for Updates…**, with no relaunch action
+- [ ] Clicking either action quits Chop, atomically replaces `Chop.app`, reopens it,
       and reports the new version in the tray
+- [ ] Quitting without relaunching removes the staged copy and keeps the current app
 - [ ] Running from a DMG, App Translocation, or an unwritable folder fails visibly
       without changing the installed app
 - [ ] Offline, "Check for Updates…" reports the failure instead of hanging or crashing

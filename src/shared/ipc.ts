@@ -49,10 +49,18 @@ export const CHANNELS = {
   licenseChanged: 'chop:license-changed',
   /** main → settings: bring a named pane forward */
   showSettingsPane: 'chop:show-settings-pane',
-  /** main → update window: download/install progress changed */
-  updateProgress: 'chop:update-progress',
-  /** update window → main: cancel the active download or close an error */
-  cancelUpdate: 'chop:cancel-update',
+  /** settings → main: current background update lifecycle */
+  getUpdateState: 'chop:get-update-state',
+  /** main → all windows: background update lifecycle changed */
+  updateStateChanged: 'chop:update-state-changed',
+  /** settings → main: install the prepared update and reopen Chop */
+  relaunchToUpdate: 'chop:relaunch-to-update',
+  /** settings → main: diagnostics and the capture on offer, for the Feedback pane */
+  getFeedbackContext: 'chop:get-feedback-context',
+  /** settings → main: post a note; resolves with whether it went */
+  sendFeedback: 'chop:send-feedback',
+  /** settings → main: hand the note to the mail client instead */
+  emailFeedback: 'chop:email-feedback',
 } as const
 
 export type ChannelName = (typeof CHANNELS)[keyof typeof CHANNELS]
@@ -60,7 +68,7 @@ export type ChannelName = (typeof CHANNELS)[keyof typeof CHANNELS]
 export type LoginItemState = 'enabled' | 'disabled' | 'requires-approval' | 'unsupported'
 
 /** The panes in the Settings sidebar, in the order they are listed. */
-export const SETTINGS_PANES = ['general', 'shortcuts', 'license'] as const
+export const SETTINGS_PANES = ['general', 'shortcuts', 'license', 'feedback'] as const
 
 export type SettingsPane = (typeof SETTINGS_PANES)[number]
 

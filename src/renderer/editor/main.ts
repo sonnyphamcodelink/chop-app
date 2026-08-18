@@ -32,6 +32,7 @@ import {
 } from '@shared/editor-state'
 import type { CaptureResult, ShortcutInfo } from '@shared/ipc'
 import type { ToolId } from '@shared/tools'
+import type { BackgroundUpdateState } from '@shared/update'
 import { createCalloutInput, type CalloutInputGeometry } from './callout-input'
 import { browserCanvasFactory, createCanvasView, textMeasurer } from './canvas-view'
 import { createFilmstrip } from './filmstrip'
@@ -50,6 +51,9 @@ type EditorBridge = {
   deleteCapture(id: string): Promise<boolean>
   getShortcut(): Promise<ShortcutInfo>
   onShortcutChanged(handler: (shortcut: ShortcutInfo) => void): void
+  getUpdateState(): Promise<BackgroundUpdateState>
+  relaunchToUpdate(): Promise<boolean>
+  onUpdateStateChanged(listener: (state: BackgroundUpdateState) => void): void
 }
 
 const bridge = (window as unknown as { chopEditor: EditorBridge }).chopEditor
@@ -61,6 +65,30 @@ const textElement = document.querySelector<HTMLTextAreaElement>('#text-input')!
 const calloutElement = document.querySelector<HTMLTextAreaElement>('#callout-input')!
 const empty = document.querySelector<HTMLDivElement>('#empty')!
 const filmstripRoot = document.querySelector<HTMLDivElement>('#filmstrip')!
+const updateCard = document.querySelector<HTMLButtonElement>('#editor-update-ready')!
+const updateVersion = document.querySelector<HTMLElement>('#editor-update-version')!
+
+function showUpdateState(update: BackgroundUpdateState): void {
+  const ready = update.phase === 'ready'
+  updateCard.hidden = !ready
+  updateCard.disabled = false
+  if (ready) updateVersion.textContent = update.tag.replace(/^v/, '')
+}
+
+updateCard.addEventListener('click', () => {
+  updateCard.disabled = true
+  void bridge
+    .relaunchToUpdate()
+    .then((started) => {
+      if (!started) updateCard.disabled = false
+    })
+    .catch((error: unknown) => {
+      console.error('Could not relaunch to update.', error)
+      updateCard.disabled = false
+    })
+})
+bridge.onUpdateStateChanged(showUpdateState)
+void bridge.getUpdateState().then(showUpdateState).catch(console.error)
 
 const view = createCanvasView(canvas)
 let state: EditorState = createEditorState(createDocument('empty', 0, 0))

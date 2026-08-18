@@ -5,6 +5,7 @@ import {
   type SaveRequest,
   type ShortcutInfo,
 } from '@shared/ipc'
+import type { BackgroundUpdateState } from '@shared/update'
 
 contextBridge.exposeInMainWorld('chopEditor', {
   onCapture(handler: (capture: CaptureResult) => void): void {
@@ -37,5 +38,16 @@ contextBridge.exposeInMainWorld('chopEditor', {
     ipcRenderer.on(CHANNELS.shortcutChanged, (_event, shortcut: ShortcutInfo) =>
       handler(shortcut),
     )
+  },
+  getUpdateState(): Promise<BackgroundUpdateState> {
+    return ipcRenderer.invoke(CHANNELS.getUpdateState) as Promise<BackgroundUpdateState>
+  },
+  relaunchToUpdate(): Promise<boolean> {
+    return ipcRenderer.invoke(CHANNELS.relaunchToUpdate) as Promise<boolean>
+  },
+  onUpdateStateChanged(listener: (state: BackgroundUpdateState) => void): void {
+    ipcRenderer.on(CHANNELS.updateStateChanged, (_event, state: BackgroundUpdateState) => {
+      listener(state)
+    })
   },
 })

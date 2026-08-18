@@ -84,10 +84,10 @@ certificate and notarization, which is a separate piece of work from this one.
 
 Chop checks for a newer version at launch and from the tray's
 **Check for Updates…**. When one is available, Chop downloads the installer in
-an in-app progress window, verifies its size and GitHub-provided SHA-256 digest,
-stages the matching Apple Silicon or Intel build, then quits, replaces the
-installed app, and reopens it. Closing the progress window cancels the download
-without touching the installed version.
+the background, verifies its size and GitHub-provided SHA-256 digest, and stages
+the matching Apple Silicon or Intel build without interrupting startup. Once it
+is ready, Settings and the main editor show **Relaunch to Update**. That explicit action
+quits Chop, atomically replaces the installed app, and reopens it.
 
 Automatic replacement requires Chop to be installed as `Chop.app` on a writable
 local volume. A copy launched directly from the DMG or through macOS App
@@ -119,6 +119,56 @@ That is what makes its Download button download the file rather than send
 someone to GitHub — so renaming an artifact silently breaks it. The site's
 `npm run check:downloads` asks GitHub whether these names really exist, and
 fails its build when one is missing.
+
+## Feedback
+
+Tray "Send Feedback…" and the Feedback pane in Settings post a note — an idea or
+a problem — to `FEEDBACK_URL` in `src/main/feedback/endpoint.ts`, which points at
+`https://api.chop.asia/feedback`. It takes a `multipart/form-data` POST:
+
+    kind          "idea" or "problem"
+    message       the note, 3 to 4000 characters
+    diagnostics   JSON: version, OS, arch, display count, licence kind
+    capture       0 to 3 images, as a repeated field
+
+`capture` repeats rather than being indexed, because that is what every
+multipart parser already reads as a list. Files are named `pasted-image-1.png`
+upward, in the order the user pasted them.
+
+Pasting an image into the message box attaches it, up to three. They arrive from
+the clipboard rather than from disk, so the bytes cross the IPC boundary and are
+checked in `src/shared/feedback/attachment.ts` before anything is sent: PNG,
+JPEG, GIF or WebP, 8 MB each and 12 MB across all of them, and real base64.
+Anything else is refused rather than repaired. The total cap is well under three
+times the per-image cap on purpose — base64 inflates by a third in transit, and
+anything the endpoint forwards to email has to survive a 25 MB mailbox limit.
+
+Images are shrunk first, in `src/renderer/settings/image-compress.ts`: fitted
+inside a 2000px box and re-encoded as WebP at quality 0.9. A full-screen Retina
+capture typically lands around a tenth of its original bytes with its text still
+readable. The reduction happens in the renderer, so the smaller version is what
+crosses IPC, and the size caps are applied to it — a capture too large to send as
+it arrived is usually fine once reduced. A large reduction is drawn through
+halving steps rather than one jump, which is what keeps small text legible.
+Animated GIFs are left alone, since a canvas would keep only the first frame, and
+anything that fails to re-encode is sent as it came.
+
+None of that protects the endpoint. Compression runs in the app, and the app is
+not the only thing that can post; the server-side limits are the real defence.
+
+Nothing is posted until the user confirms. Send raises a sheet that lists what is
+actually going — the message, how many images, and each diagnostics line spelled
+out — because a pasted screenshot can hold anything that was on screen and that
+dialog is the last place anyone can look. Backing out is its own outcome, not a
+failure. Diagnostics carry the licence *kind* only, never the key and never the
+buyer's email.
+
+The endpoint is unauthenticated by design, so rate-limit it on the server;
+nothing in the app can stop someone posting to it directly. Chop is
+offline-first, so sends fail: a failed send keeps the note on screen and offers
+Copy text and Email instead, the latter going to `FEEDBACK_EMAIL` in the same
+file. Drafts survive the settings window being closed — the text, not the
+images, which would eat the storage quota.
 
 ## Develop
 

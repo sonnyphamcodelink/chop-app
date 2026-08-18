@@ -23,9 +23,10 @@ export function openSettingsWindow(pane?: SettingsPane): BrowserWindow {
   }
 
   settings = new BrowserWindow({
-    width: 600,
-    // Tall enough for the License pane, which is the longest of the three.
-    height: 460,
+    width: 680,
+    // Tall enough for the Feedback pane, which is now the longest. The message
+    // box is the point of it, so it gets room rather than the minimum that fits.
+    height: 520,
     resizable: false,
     minimizable: false,
     maximizable: false,

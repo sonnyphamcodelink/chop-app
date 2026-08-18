@@ -40,19 +40,16 @@ export type UpdateNotice = {
   readonly cancelId: number
 }
 
-/** Index of the button that starts the in-app download. */
-export const DOWNLOAD_BUTTON = 0
-
 export function updateNotice(status: UpdateStatus): UpdateNotice {
   if (status.kind === 'update-available') {
     return {
       type: 'info',
       title: 'Update available',
       message: `Chop ${status.tag} is available.`,
-      detail: `You are running ${status.current}. Chop will download the update, replace this version, and reopen automatically.`,
-      buttons: ['Download and Install', 'Later'],
-      defaultId: DOWNLOAD_BUTTON,
-      cancelId: 1,
+      detail: `You are running ${status.current}. Chop is downloading the update in the background. “Relaunch to update” appears when it is ready.`,
+      buttons: ['OK'],
+      defaultId: 0,
+      cancelId: 0,
     }
   }
 
