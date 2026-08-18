@@ -28,7 +28,9 @@
       "Shell(git add .commandcode/settings.json && git commit -F - <<'EOF' chore: update commandcode permission allowances Co-authored-by: CommandCodeBot <noreply@commandcode.ai> EOF)",
       "Shell(npx vitest run --reporter verbose 2 >& 1)",
       "Shell(npm:*)",
-      "Shell(./resources/windowlist:*)"
+      "Shell(./resources/windowlist:*)",
+      "Shell(gh:*)",
+      "Shell(sw_vers:*)"
     ],
     "deny": [],
     "defaultMode": "default"

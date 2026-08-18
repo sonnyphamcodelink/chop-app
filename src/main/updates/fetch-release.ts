@@ -1,7 +1,7 @@
 import {
   type FeedResult,
-  latestReleaseUrl,
-  parseRelease,
+  parseReleaseFeed,
+  releasesFeedUrl,
   UPDATE_FETCH_TIMEOUT_MS,
 } from './release-feed'
 
@@ -10,7 +10,7 @@ import {
  * a failed update check must never be able to take the app down with it.
  */
 export async function fetchLatestRelease(
-  url: string = latestReleaseUrl(),
+  url: string = releasesFeedUrl(),
   fetchImpl: typeof fetch = fetch,
 ): Promise<FeedResult> {
   try {
@@ -26,7 +26,11 @@ export async function fetchLatestRelease(
       return { ok: false, reason: `GitHub answered ${response.status}.` }
     }
 
-    const release = parseRelease(await response.json())
+    const payload = await response.json()
+    if (Array.isArray(payload) && payload.length === 0) {
+      return { ok: false, reason: 'No release has been published yet.' }
+    }
+    const release = parseReleaseFeed(payload)
     if (!release) {
       return { ok: false, reason: 'The release feed was not in the expected shape.' }
     }
