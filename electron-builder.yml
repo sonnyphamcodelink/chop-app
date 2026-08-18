@@ -7,6 +7,9 @@ files:
   - out/**
   - package.json
 extraResources:
+  # Used by the native About panel on Windows and Linux.
+  - from: build/icon.png
+    to: app-icon.png
   - from: resources/windowlist
     to: windowlist
   - from: resources/tray-icon.png

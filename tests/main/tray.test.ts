@@ -33,12 +33,14 @@ vi.mock('electron', () => ({
 const { createTray } = await import('../../src/main/tray')
 
 let shortcut = 'CommandOrControl+Shift+2'
+let aboutOpened = 0
 let settingsOpened = 0
 let licenseOpened = 0
 let status: LicenseStatus = { kind: 'licensed', claims: SAMPLE_CLAIMS }
 
 function build(): { refresh(): void } {
   return createTray({
+    onAbout: () => void (aboutOpened += 1),
     onCapture: () => {},
     onOpenEditor: () => {},
     onOpenSettings: () => void (settingsOpened += 1),
@@ -53,6 +55,7 @@ function build(): { refresh(): void } {
 beforeEach(() => {
   menus.length = 0
   shortcut = 'CommandOrControl+Shift+2'
+  aboutOpened = 0
   settingsOpened = 0
   licenseOpened = 0
   status = { kind: 'licensed', claims: SAMPLE_CLAIMS }
@@ -69,6 +72,8 @@ describe('createTray', () => {
     build()
     const labels = (menus[0] ?? []).map((entry) => entry.label)
     expect(labels).toEqual([
+      'About Chop',
+      undefined, // separator
       'Capture',
       'Open Editor',
       undefined, // separator
@@ -132,5 +137,13 @@ describe('createTray', () => {
     build()
     ;(menus[0] ?? []).find((entry) => entry.label === 'Settings…')?.click?.()
     expect(settingsOpened).toBe(1)
+  })
+
+  it('opens About Chop from the first menu item', () => {
+    build()
+    const menu = menus[0] ?? []
+    expect(menu[0]?.label).toBe('About Chop')
+    menu[0]?.click?.()
+    expect(aboutOpened).toBe(1)
   })
 })

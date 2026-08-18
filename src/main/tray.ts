@@ -11,6 +11,7 @@ import type { LicenseStatus } from '@shared/license/status'
 import { trayLicenseLabel } from '@shared/license/summary'
 
 export type TrayHandlers = {
+  onAbout(): void
   onCapture(): void
   onOpenEditor(): void
   onOpenSettings(): void
@@ -33,6 +34,8 @@ function buildMenu(handlers: TrayHandlers): Menu {
   const status = handlers.licenseStatus()
 
   return Menu.buildFromTemplate([
+    { label: 'About Chop', click: handlers.onAbout },
+    { type: 'separator' },
     { label: 'Capture', accelerator: handlers.captureShortcut(), click: handlers.onCapture },
     { label: 'Open Editor', click: handlers.onOpenEditor },
     { type: 'separator' },
