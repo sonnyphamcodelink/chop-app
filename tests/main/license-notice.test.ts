@@ -74,6 +74,10 @@ describe('removeLicenseNotice', () => {
 })
 
 describe('PURCHASE_URL', () => {
+  it('opens the Chop pricing section', () => {
+    expect(PURCHASE_URL).toBe('https://chop.asia/#pricing')
+  })
+
   it('is https, because it is handed to the system browser', () => {
     expect(isSafePurchaseUrl(PURCHASE_URL)).toBe(true)
   })
