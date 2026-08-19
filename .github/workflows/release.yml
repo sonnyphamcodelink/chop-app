@@ -39,6 +39,24 @@ jobs:
           fi
           echo "Tag and package.json agree on $version."
 
+      # A bad token is otherwise only discovered after the matrix has run, and
+      # a macOS build costs 10x its wall-clock time against the monthly
+      # allowance. Prove the credential before spending that.
+      - name: Releases token must work
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_REPO_TOKEN }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::error::Secret RELEASES_REPO_TOKEN is not set on this repository."
+            exit 1
+          fi
+          if ! gh release list -R "$RELEASES_REPO" --limit 1 >/dev/null; then
+            echo "::error::RELEASES_REPO_TOKEN cannot read $RELEASES_REPO — expired, revoked, or scoped to the wrong repository."
+            exit 1
+          fi
+          echo "Token can reach $RELEASES_REPO."
+
   build:
     name: ${{ matrix.label }}
     needs: verify
