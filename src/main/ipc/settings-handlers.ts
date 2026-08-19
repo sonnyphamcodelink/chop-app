@@ -9,7 +9,7 @@ import {
   suspendCaptureShortcut,
 } from '../hotkeys'
 import { readSettings, writeSettings } from '../settings-store'
-import { withCaptureShortcut } from '../settings-file'
+import { withCaptureShortcut, withUsageEnabled } from '../settings-file'
 
 /** The shortcut in force, spelled for this platform. */
 export function currentShortcut(): ShortcutInfo {
@@ -57,5 +57,13 @@ export function registerSettingsHandlers(onChanged: (shortcut: ShortcutInfo) => 
   ipcMain.handle(CHANNELS.setOpenAtLogin, (_event, enabled: unknown): LoginItemState => {
     if (typeof enabled !== 'boolean') return openAtLoginState()
     return setOpenAtLogin(enabled)
+  })
+
+  ipcMain.handle(CHANNELS.getUsageEnabled, (): boolean => readSettings().usageEnabled)
+
+  ipcMain.handle(CHANNELS.setUsageEnabled, (_event, enabled: unknown): boolean => {
+    const value = typeof enabled === 'boolean' ? enabled : readSettings().usageEnabled
+    writeSettings(withUsageEnabled(readSettings(), value))
+    return readSettings().usageEnabled
   })
 }

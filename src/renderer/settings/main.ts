@@ -23,6 +23,8 @@ type SettingsBridge = LicenseBridge & FeedbackBridge & {
   getUpdateState(): Promise<BackgroundUpdateState>
   relaunchToUpdate(): Promise<boolean>
   onUpdateStateChanged(listener: (state: BackgroundUpdateState) => void): void
+  getUsageEnabled(): Promise<boolean>
+  setUsageEnabled(enabled: boolean): Promise<boolean>
 }
 
 const bridge = (window as unknown as { chopSettings: SettingsBridge }).chopSettings
@@ -111,6 +113,37 @@ void bridge
   .catch((error: unknown) => {
     console.error('Could not read Open at Login.', error)
     applyLoginState('unsupported')
+  })
+
+// ---------------------------------------------------------------------------
+// Usage reporting switch
+// ---------------------------------------------------------------------------
+
+const usageSwitch = document.querySelector<HTMLInputElement>('#usage-enabled')!
+
+usageSwitch.addEventListener('change', () => {
+  void bridge
+    .setUsageEnabled(usageSwitch.checked)
+    .then((enabled) => {
+      usageSwitch.checked = enabled
+    })
+    .catch((error: unknown) => {
+      console.error('Could not change usage reporting setting.', error)
+      // Revert the checkbox to match the actual stored value.
+      void bridge.getUsageEnabled().then((enabled) => {
+        usageSwitch.checked = enabled
+      })
+    })
+})
+
+void bridge
+  .getUsageEnabled()
+  .then((enabled) => {
+    usageSwitch.checked = enabled
+  })
+  .catch((error: unknown) => {
+    console.error('Could not read usage reporting setting.', error)
+    usageSwitch.checked = true // default on
   })
 
 const field = document.querySelector<HTMLButtonElement>('#shortcut')!

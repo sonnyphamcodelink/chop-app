@@ -1,0 +1,118 @@
+name: Release
+
+# Chop's source is private but its installers are public, so builds run here and
+# the finished artifacts are pushed to the public sonnyphamcodelink/chop-releases
+# repo, which is where the in-app updater looks (src/main/updates/release-feed.ts).
+on:
+  push:
+    tags: ['v*']
+  # Builds the installers without touching chop-releases, for a dry run.
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  RELEASES_REPO: sonnyphamcodelink/chop-releases
+
+jobs:
+  # A minute on Linux is cheap; a wasted macOS matrix is 100 minutes of the
+  # monthly allowance. Catch a mistyped tag before that gets spent.
+  verify:
+    name: Verify tag
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Tag must match package.json version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          version="$(node -p "require('./package.json').version")"
+          if [ "$tag" != "$version" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match package.json version $version."
+            exit 1
+          fi
+          echo "Tag and package.json agree on $version."
+
+  build:
+    name: ${{ matrix.label }}
+    needs: verify
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # One platform failing should not hide whether the other one builds.
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            label: macOS (dmg)
+            artifact: chop-macos
+            files: release/*.dmg
+          - os: windows-latest
+            label: Windows (exe)
+            artifact: chop-windows
+            files: release/*.exe
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      # postinstall compiles the Swift window helper on macOS and no-ops elsewhere.
+      - run: npm ci
+
+      - name: Package
+        run: npm run package
+        env:
+          # electron-builder.yml pins `identity: null` (ad-hoc signing), so stop
+          # electron-builder hunting the runner keychain for a certificate.
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.files }}
+          if-no-files-found: error
+
+  publish:
+    name: Draft release in chop-releases
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: installers
+          merge-multiple: true
+
+      - name: Upload to ${{ env.RELEASES_REPO }}
+        env:
+          # Fine-grained PAT scoped to chop-releases with Contents: read and
+          # write. GITHUB_TOKEN cannot reach across repositories.
+          GH_TOKEN: ${{ secrets.RELEASES_REPO_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::error::Secret RELEASES_REPO_TOKEN is not set on this repository."
+            exit 1
+          fi
+          ls -lh installers
+          # Left as a draft on purpose: the updater ignores drafts, so nothing
+          # reaches users until the notes are written and Publish is pressed.
+          if gh release view "$TAG" -R "$RELEASES_REPO" >/dev/null 2>&1; then
+            echo "Release $TAG already exists — replacing its installers."
+            gh release upload "$TAG" installers/* -R "$RELEASES_REPO" --clobber
+          else
+            gh release create "$TAG" installers/* \
+              -R "$RELEASES_REPO" \
+              --draft \
+              --title "Chop ${TAG#v}" \
+              --notes "Installers built from ${{ github.repository }}@${{ github.sha }}. Replace this text before publishing."
+          fi

@@ -61,6 +61,10 @@ export const CHANNELS = {
   sendFeedback: 'chop:send-feedback',
   /** settings → main: hand the note to the mail client instead */
   emailFeedback: 'chop:email-feedback',
+  /** settings → main: whether anonymous usage reporting is on */
+  getUsageEnabled: 'chop:get-usage-enabled',
+  /** settings → main: toggle anonymous usage reporting; resolves with the new value */
+  setUsageEnabled: 'chop:set-usage-enabled',
 } as const
 
 export type ChannelName = (typeof CHANNELS)[keyof typeof CHANNELS]

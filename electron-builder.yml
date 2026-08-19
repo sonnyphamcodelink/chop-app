@@ -6,12 +6,12 @@ directories:
 files:
   - out/**
   - package.json
+# Platform sections replace this list rather than merging with it, so the mac
+# section below repeats these entries alongside its own helper binary.
 extraResources:
   # Used by the native About panel on Windows and Linux.
   - from: build/icon.png
     to: app-icon.png
-  - from: resources/windowlist
-    to: windowlist
   - from: resources/tray-icon.png
     to: tray-icon.png
   # nativeImage picks the @2x file up from beside the 1x one on retina screens.
@@ -19,6 +19,17 @@ extraResources:
     to: tray-icon@2x.png
 mac:
   icon: build/icon.png
+  # The window helper is compiled by scripts/build-swift-helper.mjs, which only
+  # runs on macOS, so only the mac artifacts can ship it.
+  extraResources:
+    - from: build/icon.png
+      to: app-icon.png
+    - from: resources/windowlist
+      to: windowlist
+    - from: resources/tray-icon.png
+      to: tray-icon.png
+    - from: resources/tray-icon@2x.png
+      to: tray-icon@2x.png
   category: public.app-category.productivity
   # Deliberately version-less. The landing page links straight at
   # releases/latest/download/<name>, which only resolves for a name that does

@@ -3,12 +3,17 @@ import { listCapturableWindows, resolveWindowProvider } from '../window-provider
 import { captureAllDisplays } from './capture-service'
 import { cropCapture } from './crop'
 import { showOverlays } from './overlay-manager'
+import { recordUsage } from '../usage/usage-store'
 
 let inFlight = false
 
 /**
  * The full capture pipeline. Guarded against re-entry so a repeated hotkey press
  * cannot stack overlays on top of each other.
+ *
+ * Increments the `captures` usage counter on every non-null return — a
+ * cancelled overlay does not count. Counting is unconditional so the capture
+ * path stays clean of settings checks.
  */
 export async function runCaptureFlow(): Promise<CaptureResult | null> {
   if (inFlight) return null
@@ -29,7 +34,10 @@ export async function runCaptureFlow(): Promise<CaptureResult | null> {
       console.warn(`Selection referenced unknown display ${selection.displayId}.`)
       return null
     }
-    return cropCapture(capture, selection)
+
+    const result = cropCapture(capture, selection)
+    if (result) recordUsage('captures')
+    return result
   } catch (error) {
     console.error('Capture failed.', error)
     return null

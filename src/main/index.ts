@@ -19,6 +19,7 @@ import {
   discardPreparedUpdate,
   registerUpdateHandlers,
 } from './updates'
+import { initUsageStore, startUsageReporting, stopUsageReporting } from './usage'
 
 // Held at module scope so the tray is not garbage collected.
 let tray: TrayController | null = null
@@ -53,6 +54,10 @@ if (!app.requestSingleInstanceLock()) {
     registerLicenseHandlers(() => tray?.refresh())
     registerUpdateHandlers()
     registerFeedbackHandlers()
+
+    // Initialise the usage store (resolves the hardware device id if needed),
+    // then start the reporting scheduler.
+    void initUsageStore().then(() => startUsageReporting())
 
     // E2E seam: the main bundle is a single file, so Playwright cannot import
     // sendCapture directly. Only exposed when a test capture root is set.
@@ -94,5 +99,6 @@ if (!app.requestSingleInstanceLock()) {
   app.on('will-quit', () => {
     unregisterHotkeys()
     discardPreparedUpdate()
+    stopUsageReporting()
   })
 }

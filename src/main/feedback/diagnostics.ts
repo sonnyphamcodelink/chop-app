@@ -24,12 +24,22 @@ function licenseWord(): string {
   }
 }
 
-export function collectDiagnostics(): FeedbackDiagnostics {
+/** The app version, OS version, and CPU architecture — used by both feedback and usage. */
+export function collectSystemInfo(): { appVersion: string; osVersion: string; arch: string } {
   return {
     appVersion: app.getVersion(),
-    platform: process.platform,
     osVersion: release(),
     arch: process.arch,
+  }
+}
+
+export function collectDiagnostics(): FeedbackDiagnostics {
+  const { appVersion, osVersion, arch } = collectSystemInfo()
+  return {
+    appVersion,
+    platform: process.platform,
+    osVersion,
+    arch,
     // Reading displays needs the app ready, which it is by the time a settings
     // window exists. A failure here must not cost the user their note.
     displayCount: safeDisplayCount(),
