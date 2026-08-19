@@ -68,8 +68,11 @@ jobs:
       # postinstall compiles the Swift window helper on macOS and no-ops elsewhere.
       - run: npm ci
 
+      # `--publish never` matters: electron-builder publishes on its own for a
+      # tag build on CI, and it would aim at this repo rather than the public
+      # one. The publish job below owns that step.
       - name: Package
-        run: npm run package
+        run: npm run package -- --publish never
         env:
           # electron-builder.yml pins `identity: null` (ad-hoc signing), so stop
           # electron-builder hunting the runner keychain for a certificate.
