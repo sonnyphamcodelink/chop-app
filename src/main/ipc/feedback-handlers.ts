@@ -1,6 +1,6 @@
 import { BrowserWindow, dialog, ipcMain, shell } from 'electron'
 import { CHANNELS } from '@shared/ipc'
-import { parsePastedImage, type PastedImage } from '@shared/feedback/attachment'
+import { parsePastedImages } from '@shared/feedback/attachment'
 import { parseDraft } from '@shared/feedback/draft'
 import { feedbackMailtoUrl } from '@shared/feedback/transcript'
 import type {
@@ -33,10 +33,8 @@ export function registerFeedbackHandlers(): void {
 
     // The images arrive as bytes from the clipboard, so they are checked here
     // rather than trusted: type, shape and size all have to hold for every one.
-    const images = draft.attachments.map(parsePastedImage)
-    if (images.some((image) => image === null)) {
-      return { status: 'failed', reason: BAD_IMAGE }
-    }
+    const images = parsePastedImages(draft.attachments)
+    if (!images) return { status: 'failed', reason: BAD_IMAGE }
 
     const diagnostics = diagnosticsFor(draft)
 
@@ -52,7 +50,7 @@ export function registerFeedbackHandlers(): void {
 
     if (response !== SEND_BUTTON) return { status: 'cancelled' }
 
-    return postFeedback({ draft, diagnostics, images: images as PastedImage[] })
+    return postFeedback({ draft, diagnostics, images })
   })
 
   // The address is a constant in the bundle, never anything the renderer sent.
