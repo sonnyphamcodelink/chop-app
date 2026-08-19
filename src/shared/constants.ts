@@ -28,8 +28,8 @@ export const STROKE_WIDTH_MAX = 12
 /** The three weights the toolbar offers, in image pixels. */
 export const STROKE_WIDTHS = { thin: 3, medium: 6, thick: 10 } as const
 
-/** Default matches the toolbar's middle weight — bold enough to read, not heavy. */
-export const DEFAULT_STROKE_WIDTH = STROKE_WIDTHS.medium
+/** Default matches the toolbar's heaviest weight. */
+export const DEFAULT_STROKE_WIDTH = STROKE_WIDTHS.thick
 export const DEFAULT_FONT_SIZE = 40
 
 /** Callout bubble corner rounding, in image pixels. */
