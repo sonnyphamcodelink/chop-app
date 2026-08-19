@@ -8,6 +8,7 @@ import {
   RAW_PASTE_MAX_BYTES,
   MAX_ATTACHMENTS,
   parsePastedImage,
+  parsePastedImages,
   type PastedImage,
   totalBytes,
 } from '../../../src/shared/feedback/attachment'
@@ -73,6 +74,35 @@ describe('parsePastedImage', () => {
     expect(parsePastedImage('data:image/png;base64,AAAA')?.byteLength).toBe(3)
     expect(parsePastedImage('data:image/png;base64,AAA=')?.byteLength).toBe(2)
     expect(parsePastedImage('data:image/png;base64,AA==')?.byteLength).toBe(1)
+  })
+})
+
+describe('parsePastedImages', () => {
+  it('accepts the first attachment using the normal byte limit', () => {
+    const dataUrl = `data:image/png;base64,${PNG_BASE64}`
+
+    expect(parsePastedImages([dataUrl])).toEqual([parsePastedImage(dataUrl)])
+  })
+
+  it('accepts multiple valid attachments in order', () => {
+    const png = `data:image/png;base64,${PNG_BASE64}`
+    const jpeg = `data:image/jpeg;base64,${PNG_BASE64}`
+
+    expect(parsePastedImages([png, jpeg])?.map((image) => image.mediaType)).toEqual([
+      'image/png',
+      'image/jpeg',
+    ])
+  })
+
+  it('rejects the complete list when any attachment is invalid', () => {
+    expect(parsePastedImages([`data:image/png;base64,${PNG_BASE64}`, 'not-an-image'])).toBeNull()
+  })
+
+  it('rejects a list past the total byte limit', () => {
+    const first = ofSize(ATTACHMENT_MAX_BYTES)
+    const second = ofSize(ATTACHMENTS_TOTAL_MAX_BYTES - ATTACHMENT_MAX_BYTES + 1)
+
+    expect(parsePastedImages([first, second])).toBeNull()
   })
 })
 

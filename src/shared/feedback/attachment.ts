@@ -75,6 +75,27 @@ export function parsePastedImage(
   return { dataUrl: value, mediaType, byteLength }
 }
 
+/**
+ * Validates a complete attachment list at the main-process boundary.
+ *
+ * Keeping this as a dedicated operation also avoids passing `parsePastedImage`
+ * directly to `Array.map`: map's second callback argument is the array index,
+ * which would otherwise be mistaken for the parser's optional byte limit.
+ */
+export function parsePastedImages(values: readonly unknown[]): PastedImage[] | null {
+  if (values.length > MAX_ATTACHMENTS) return null
+
+  const images: PastedImage[] = []
+  for (const value of values) {
+    const image = parsePastedImage(value)
+    if (!image) return null
+    images.push(image)
+  }
+
+  if (totalBytes(images) > ATTACHMENTS_TOTAL_MAX_BYTES) return null
+  return images
+}
+
 export function totalBytes(images: readonly PastedImage[]): number {
   return images.reduce((sum, image) => sum + image.byteLength, 0)
 }
