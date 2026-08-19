@@ -188,6 +188,15 @@
       #feedback-sent button:hover { background: var(--field); }
       footer { margin-top: auto; padding-top: 12px; border-top: 1px solid var(--line); color: var(--muted); line-height: 1.4; }
       #login-note { margin: 0; color: var(--muted); line-height: 1.4; }
+      #usage-disclosure {
+        border: 1px solid var(--line); border-radius: 8px;
+        padding: 8px 12px;
+        color: var(--muted); font-size: 12px; line-height: 1.5;
+      }
+      #usage-disclosure summary { cursor: pointer; color: var(--accent); user-select: none; }
+      #usage-disclosure ul { margin: 6px 0 0; padding-left: 20px; }
+      #usage-disclosure li { margin-bottom: 3px; }
+      #usage-disclosure p { margin: 6px 0 0; }
       .switch {
         position: relative; width: 40px; height: 24px; flex: 0 0 auto;
       }
@@ -230,6 +239,25 @@
           </label>
         </div>
         <p id="login-note" hidden>Open at Login is not available on this system.</p>
+        <div class="row">
+          <label for="usage-enabled">Share anonymous usage data</label>
+          <label class="switch">
+            <input id="usage-enabled" type="checkbox" role="switch" />
+            <span></span>
+          </label>
+        </div>
+        <details id="usage-disclosure">
+          <summary>What's included</summary>
+          <ul>
+            <li>A stable device identifier (a one-way hash of your Mac's hardware UUID — not the UUID itself)</li>
+            <li>Daily counts of captures, saves, and copies</li>
+            <li>App version and macOS version</li>
+            <li>Licence state (trial, licensed, etc.)</li>
+            <li>For licensed copies: the licence email, extracted server-side from your signed licence key</li>
+            <li>Trial copies are counted without any email</li>
+          </ul>
+          <p>No image content, filenames, window titles, or personally identifying information beyond the above is ever collected.</p>
+        </details>
       </section>
       <section id="pane-shortcuts" class="pane" aria-labelledby="shortcuts-title">
         <h1 id="shortcuts-title">Shortcuts</h1>

@@ -11,6 +11,7 @@ import {
   saveCapture,
 } from '../storage/capture-store'
 import { capturePaths } from '../storage/paths'
+import { recordUsage } from '../usage/usage-store'
 
 /** Base names are assigned once per capture id so re-saves overwrite in place. */
 const namesById = new Map<string, string>()
@@ -45,6 +46,7 @@ export function registerEditorHandlers(rootDir: string): void {
         thumbPng: image.resize(thumb).toPNG(),
         documentJson: JSON.stringify(request.document),
       })
+      recordUsage('imagesSaved')
     } catch (error) {
       console.error('Failed to save capture.', error)
       await dialog.showMessageBox({
@@ -64,6 +66,7 @@ export function registerEditorHandlers(rootDir: string): void {
       return
     }
     clipboard.writeImage(image)
+    recordUsage('imagesCopied')
   })
 
   ipcMain.handle(CHANNELS.saveCaptureAs, async (_event, dataUrl: string) => {
@@ -73,6 +76,7 @@ export function registerEditorHandlers(rootDir: string): void {
     })
     if (canceled || !filePath) return null
     await writeFile(filePath, nativeImage.createFromDataURL(dataUrl).toPNG())
+    recordUsage('imagesSaved')
     return filePath
   })
 

@@ -53,6 +53,12 @@ contextBridge.exposeInMainWorld('chopSettings', {
   emailFeedback(draft: FeedbackDraft): Promise<boolean> {
     return ipcRenderer.invoke(CHANNELS.emailFeedback, draft) as Promise<boolean>
   },
+  getUsageEnabled(): Promise<boolean> {
+    return ipcRenderer.invoke(CHANNELS.getUsageEnabled) as Promise<boolean>
+  },
+  setUsageEnabled(enabled: boolean): Promise<boolean> {
+    return ipcRenderer.invoke(CHANNELS.setUsageEnabled, enabled) as Promise<boolean>
+  },
   getUpdateState(): Promise<BackgroundUpdateState> {
     return ipcRenderer.invoke(CHANNELS.getUpdateState) as Promise<BackgroundUpdateState>
   },

@@ -7,10 +7,13 @@ import { acceleratorProblem, DEFAULT_CAPTURE_SHORTCUT } from '@shared/accelerato
 export type ChopSettings = {
   /** Electron accelerator for the capture hotkey. */
   readonly captureShortcut: string
+  /** Whether anonymous daily usage data is sent to the developer. Default on. */
+  readonly usageEnabled: boolean
 }
 
 export const DEFAULT_SETTINGS: ChopSettings = {
   captureShortcut: DEFAULT_CAPTURE_SHORTCUT,
+  usageEnabled: true,
 }
 
 function readShortcut(value: unknown): string {
@@ -18,6 +21,15 @@ function readShortcut(value: unknown): string {
     return DEFAULT_SETTINGS.captureShortcut
   }
   return value
+}
+
+/**
+ * Absent key → default true; anything else must be a literal boolean.
+ * A hand-edited string like "yes" is not accepted — too easy to make unusable.
+ */
+function readUsageEnabled(value: unknown): boolean {
+  if (value === undefined || value === null) return DEFAULT_SETTINGS.usageEnabled
+  return value !== false
 }
 
 /**
@@ -35,7 +47,11 @@ export function parseSettings(json: string | null): ChopSettings {
   }
   if (typeof raw !== 'object' || raw === null) return DEFAULT_SETTINGS
 
-  return { captureShortcut: readShortcut((raw as Record<string, unknown>).captureShortcut) }
+  const r = raw as Record<string, unknown>
+  return {
+    captureShortcut: readShortcut(r.captureShortcut),
+    usageEnabled: readUsageEnabled(r.usageEnabled),
+  }
 }
 
 export function serializeSettings(settings: ChopSettings): string {
@@ -47,4 +63,8 @@ export function withCaptureShortcut(
   captureShortcut: string,
 ): ChopSettings {
   return { ...settings, captureShortcut }
+}
+
+export function withUsageEnabled(settings: ChopSettings, usageEnabled: boolean): ChopSettings {
+  return { ...settings, usageEnabled }
 }
