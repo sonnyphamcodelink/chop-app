@@ -67,6 +67,10 @@ const empty = document.querySelector<HTMLDivElement>('#empty')!
 const filmstripRoot = document.querySelector<HTMLDivElement>('#filmstrip')!
 const updateCard = document.querySelector<HTMLButtonElement>('#editor-update-ready')!
 const updateVersion = document.querySelector<HTMLElement>('#editor-update-version')!
+const zoomControls = document.querySelector<HTMLDivElement>('#zoom-controls')!
+const zoomOutButton = document.querySelector<HTMLButtonElement>('#zoom-out')!
+const zoomLevelButton = document.querySelector<HTMLButtonElement>('#zoom-level')!
+const zoomInButton = document.querySelector<HTMLButtonElement>('#zoom-in')!
 
 function showUpdateState(update: BackgroundUpdateState): void {
   const ready = update.phase === 'ready'
@@ -91,6 +95,9 @@ bridge.onUpdateStateChanged(showUpdateState)
 void bridge.getUpdateState().then(showUpdateState).catch(console.error)
 
 const view = createCanvasView(canvas)
+const MIN_ZOOM = 0.25
+const MAX_ZOOM = 4
+const ZOOM_STEP = 0.1
 let state: EditorState = createEditorState(createDocument('empty', 0, 0))
 let loaded = false
 let imageElement: HTMLImageElement | null = null
@@ -111,6 +118,51 @@ function draw(): void {
   toolbar.setColor(state.style.color)
   toolbar.setStrokeWidth(state.style.strokeWidth)
   if (loaded) view.render(state)
+}
+
+function clampZoom(zoom: number): number {
+  return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom))
+}
+
+function updateZoomControls(): void {
+  const zoom = view.zoom()
+  zoomLevelButton.textContent = `${Math.round(zoom * 100)}%`
+  zoomOutButton.disabled = zoom <= MIN_ZOOM
+  zoomInButton.disabled = zoom >= MAX_ZOOM
+}
+
+/**
+ * Zooms around a viewport point so the content under the pointer does not jump.
+ * Button zoom uses the middle of the stage as its anchor.
+ */
+function applyZoom(nextZoom: number, clientX?: number, clientY?: number): void {
+  if (!loaded) return
+  const zoom = clampZoom(Math.round(nextZoom * 100) / 100)
+  if (zoom === view.zoom()) return
+
+  // HTML editors are canvas-positioned at their opening scale. Commit them before
+  // the canvas changes size so no field is left detached from its annotation.
+  calloutInput.commit()
+  if (textInput.isOpen) textInput.commit()
+
+  const stageRect = stage.getBoundingClientRect()
+  const anchorX = clientX ?? stageRect.left + stageRect.width / 2
+  const anchorY = clientY ?? stageRect.top + stageRect.height / 2
+  const before = canvas.getBoundingClientRect()
+  const relativeX = before.width > 0 ? (anchorX - before.left) / before.width : 0.5
+  const relativeY = before.height > 0 ? (anchorY - before.top) / before.height : 0.5
+
+  view.setZoom(zoom)
+  draw()
+  updateZoomControls()
+
+  const after = canvas.getBoundingClientRect()
+  stage.scrollLeft += after.left + after.width * relativeX - anchorX
+  stage.scrollTop += after.top + after.height * relativeY - anchorY
+}
+
+function stepZoom(direction: -1 | 1, clientX?: number, clientY?: number): void {
+  applyZoom(view.zoom() + direction * ZOOM_STEP, clientX, clientY)
 }
 
 /** Where Escape and Enter return to when a crop session ends. */
@@ -178,6 +230,20 @@ function stagePoint(imagePoint: Point): Point {
 }
 
 const calloutInput = createCalloutInput(calloutElement)
+
+zoomOutButton.addEventListener('click', () => stepZoom(-1))
+zoomInButton.addEventListener('click', () => stepZoom(1))
+zoomLevelButton.addEventListener('click', () => applyZoom(1))
+
+stage.addEventListener(
+  'wheel',
+  (event) => {
+    if (!event.metaKey || event.deltaY === 0 || !loaded) return
+    event.preventDefault()
+    stepZoom(event.deltaY < 0 ? 1 : -1, event.clientX, event.clientY)
+  },
+  { passive: false },
+)
 
 /** The document from before the open note was touched, so undo steps over the whole edit. */
 let calloutEditOrigin: CaptureDocument | null = null
@@ -411,6 +477,8 @@ function showCanvas(): void {
   loaded = true
   canvas.style.display = ''
   empty.style.display = 'none'
+  zoomControls.hidden = false
+  updateZoomControls()
 }
 
 /** Returns the editor to its blank state once the open capture is gone. */
@@ -420,8 +488,10 @@ function clearEditor(): void {
   discardEditors()
   loaded = false
   imageElement = null
+  view.setZoom(1)
   canvas.style.display = 'none'
   empty.style.display = ''
+  zoomControls.hidden = true
   state = createEditorState(createDocument('empty', 0, 0))
   filmstrip.setActive(null)
   draw()
@@ -456,6 +526,7 @@ async function openCapture(id: string): Promise<void> {
   image.addEventListener('load', () => {
     imageElement = image
     view.setImage(image)
+    view.setZoom(1)
     showCanvas()
     discardEditors()
     const doc = capture.documentJson
@@ -473,6 +544,7 @@ bridge.onCapture((capture) => {
   image.addEventListener('load', () => {
     imageElement = image
     view.setImage(image)
+    view.setZoom(1)
     showCanvas()
     discardEditors()
     store.set(createEditorState(createDocument(capture.id, capture.width, capture.height, capture.scaleFactor)))

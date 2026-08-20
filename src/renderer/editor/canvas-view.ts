@@ -35,6 +35,8 @@ export function textMeasurer(fontSize: number): (text: string) => number {
 
 export type CanvasView = {
   setImage(image: HTMLImageElement): void
+  /** Sets the user-selected multiplier on top of the fit-to-window scale. */
+  setZoom(zoom: number): void
   render(state: EditorState): void
   /** Renders the exported image: no zoom, no selection chrome. */
   renderTo(target: CanvasRenderingContext2D, state: EditorState): void
@@ -42,6 +44,7 @@ export type CanvasView = {
   /** Image coordinates to canvas-local CSS pixels, for positioning overlays. */
   toCanvasPoint(point: Point, state: EditorState): Point
   scale(): number
+  zoom(): number
 }
 
 const SELECTION_COLOR = '#2f9bff'
@@ -78,6 +81,8 @@ export function createCanvasView(canvas: HTMLCanvasElement): CanvasView {
   let image: HTMLImageElement | null = null
   /** CSS pixels per image pixel (on-screen size). Hit-testing uses this. */
   let currentScale = 1
+  /** User zoom is relative to the fitted size, where 1 is the default 100%. */
+  let currentZoom = 1
 
   /** Reframing draws the whole image, so it has no crop offset. Trimming keeps it. */
   function cropOrigin(state: EditorState): Rect | null {
@@ -243,6 +248,10 @@ export function createCanvasView(canvas: HTMLCanvasElement): CanvasView {
       image = next
     },
 
+    setZoom(zoom: number): void {
+      currentZoom = zoom > 0 ? zoom : 1
+    },
+
     render(state: EditorState): void {
       if (!image) return
       const reframing = state.cropSession?.mode === 'reframe'
@@ -254,12 +263,13 @@ export function createCanvasView(canvas: HTMLCanvasElement): CanvasView {
         : documentWithDraft(baseDoc, state.draft, state.style)
       const size = outputSize(doc)
       const parent = canvas.parentElement
-      currentScale = fitScale(
+      const fittedScale = fitScale(
         size.width, size.height,
         parent?.clientWidth ?? size.width,
         parent?.clientHeight ?? size.height,
         doc.scaleFactor,
       )
+      currentScale = fittedScale * currentZoom
       const bufferScale = backingScale(currentScale, window.devicePixelRatio)
 
       const cssWidth = Math.max(1, Math.round(size.width * currentScale))
@@ -302,6 +312,10 @@ export function createCanvasView(canvas: HTMLCanvasElement): CanvasView {
 
     scale(): number {
       return currentScale
+    },
+
+    zoom(): number {
+      return currentZoom
     },
   }
 }

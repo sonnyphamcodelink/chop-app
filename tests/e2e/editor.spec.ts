@@ -71,6 +71,43 @@ test('an incoming capture opens the editor and is auto-saved', async () => {
   await expect(page.locator('#filmstrip .thumb.active img')).toHaveAttribute('src', /data:image/)
 })
 
+test('zoom controls and Command+wheel resize the fitted canvas', async () => {
+  await sendCapture({
+    id: 'e2e-zoom',
+    dataUrl: ONE_PIXEL_PNG,
+    width: 400,
+    height: 300,
+    createdAt: new Date().toISOString(),
+  })
+
+  const page = await app.firstWindow()
+  const canvas = page.locator('#canvas')
+  const zoomLevel = page.locator('#zoom-level')
+  await expect(canvas).toBeVisible()
+  await expect(zoomLevel).toHaveText('100%')
+
+  const initial = await canvas.boundingBox()
+  if (!initial) throw new Error('canvas has no bounding box')
+
+  await page.getByRole('button', { name: 'Zoom in' }).click()
+  await expect(zoomLevel).toHaveText('110%')
+  await expect
+    .poll(async () => (await canvas.boundingBox())?.width)
+    .toBeCloseTo(initial.width * 1.1, 0)
+
+  const zoomed = await canvas.boundingBox()
+  if (!zoomed) throw new Error('zoomed canvas has no bounding box')
+  await page.mouse.move(zoomed.x + zoomed.width / 2, zoomed.y + zoomed.height / 2)
+  await page.keyboard.down('Meta')
+  await page.mouse.wheel(0, 100)
+  await page.keyboard.up('Meta')
+  await expect(zoomLevel).toHaveText('100%')
+
+  await page.getByRole('button', { name: 'Zoom in' }).click()
+  await page.getByRole('button', { name: 'Reset zoom' }).click()
+  await expect(zoomLevel).toHaveText('100%')
+})
+
 test('drawing a box is undoable and lands in the saved document', async () => {
   await sendCapture({
     id: 'e2e-2',

@@ -135,14 +135,65 @@
       .editor-update-copy small { opacity: 0.58; font-size: 12px; }
       #stage {
         flex: 1 1 auto;
-        display: grid;
-        place-items: center;
+        display: flex;
         overflow: auto;
         padding: 16px;
         background: rgba(128, 128, 128, 0.12);
         position: relative;
       }
-      #canvas { box-shadow: 0 2px 12px rgba(0, 0, 0, 0.25); }
+      #canvas {
+        flex: 0 0 auto;
+        margin: auto;
+        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.25);
+      }
+      #zoom-controls {
+        --zoom-hover: oklch(0.9 0.01 250);
+        position: fixed;
+        left: 50%;
+        bottom: 106px;
+        z-index: 9;
+        display: flex;
+        align-items: center;
+        padding: 5px;
+        border-radius: 11px;
+        background: oklch(1 0 0 / 0.76);
+        color: oklch(0.3 0.01 250);
+        backdrop-filter: blur(16px) saturate(1.4);
+        -webkit-backdrop-filter: blur(16px) saturate(1.4);
+        box-shadow:
+          0 1px 2px oklch(0.2 0 0 / 0.08),
+          0 6px 20px oklch(0.2 0 0 / 0.14),
+          0 0 0 1px oklch(1 0 0 / 0.5) inset;
+        transform: translateX(-50%);
+      }
+      #zoom-controls[hidden] { display: none; }
+      #zoom-controls button {
+        height: 30px;
+        border: none;
+        border-radius: 7px;
+        background: transparent;
+        color: inherit;
+        font: 600 13px/1 -apple-system, system-ui, sans-serif;
+        cursor: pointer;
+      }
+      #zoom-controls button:hover { background: var(--zoom-hover); }
+      #zoom-controls button:focus-visible {
+        outline: 2px solid #2f9bff;
+        outline-offset: 1px;
+      }
+      #zoom-out, #zoom-in {
+        width: 30px;
+        font-size: 19px !important;
+      }
+      #zoom-level {
+        min-width: 56px;
+        padding: 0 8px;
+      }
+      #zoom-controls button:disabled {
+        opacity: 0.35;
+        cursor: default;
+        background: transparent;
+      }
       #text-input {
         position: absolute;
         display: none;
@@ -234,6 +285,11 @@
       <textarea id="text-input" rows="1" spellcheck="false"></textarea>
       <textarea id="callout-input" rows="1" spellcheck="false"></textarea>
       <div id="empty">Press ⌘⇧2 to capture</div>
+    </div>
+    <div id="zoom-controls" role="group" aria-label="Zoom controls" hidden>
+      <button id="zoom-out" type="button" aria-label="Zoom out" title="Zoom out">−</button>
+      <button id="zoom-level" type="button" aria-label="Reset zoom" title="Reset zoom">100%</button>
+      <button id="zoom-in" type="button" aria-label="Zoom in" title="Zoom in">+</button>
     </div>
     <button id="editor-update-ready" type="button" hidden>
       <span class="editor-update-mark" aria-hidden="true">↻</span>
