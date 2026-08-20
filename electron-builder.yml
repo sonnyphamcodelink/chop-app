@@ -41,7 +41,9 @@ mac:
       arch: [arm64, x64]
   # Screen Recording permission is bound to the code signature, so an ad-hoc
   # signature keeps the grant stable across rebuilds of the same build config.
-  identity: null
+  # "-" is codesign's ad-hoc identity. null skips signing entirely, which on
+  # Apple Silicon looks like a damaged app rather than an unverified one.
+  identity: "-"
   hardenedRuntime: false
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist

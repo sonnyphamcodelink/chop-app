@@ -92,7 +92,7 @@ jobs:
       - name: Package
         run: npm run package -- --publish never
         env:
-          # electron-builder.yml pins `identity: null` (ad-hoc signing), so stop
+          # electron-builder.yml pins `identity: "-"` (ad-hoc signing), so stop
           # electron-builder hunting the runner keychain for a certificate.
           CSC_IDENTITY_AUTO_DISCOVERY: false
 

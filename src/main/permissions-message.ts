@@ -12,8 +12,8 @@ export function permissionMessage(state: PermissionState): string {
     case 'not-determined':
       return (
         'Chop needs Screen Recording permission to capture your screen.\n\n' +
-        'macOS will ask for it the first time you capture. If no prompt appears, ' +
-        'grant it in System Settings → Privacy & Security → Screen Recording.'
+        'Open System Settings → Privacy & Security → Screen Recording, ' +
+        'enable Chop, then relaunch the app.'
       )
     default:
       return ''

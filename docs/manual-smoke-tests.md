@@ -14,7 +14,9 @@ These exercise platform code that cannot run in CI.
 - [ ] Highlighting is correct on a secondary display
 
 ## Permissions (macOS)
-- [ ] With Screen Recording denied, capture shows guidance and opens System Settings
+- [ ] First launch of a packaged build does not prompt for Screen Recording
+- [ ] The first capture shows only the macOS prompt, and lists Chop under Screen Recording without using +
+- [ ] Dismissing that prompt and capturing again shows Chop's own guidance instead
 - [ ] After granting and relaunching, capture works
 
 ## Settings

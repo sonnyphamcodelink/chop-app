@@ -8,8 +8,10 @@ describe('permissionMessage', () => {
     expect(message).toMatch(/System Settings/i)
   })
 
-  it('explains the first-run prompt when not determined', () => {
-    expect(permissionMessage('not-determined')).toMatch(/Screen Recording/i)
+  it('explains how to enable Chop when not determined', () => {
+    const message = permissionMessage('not-determined')
+    expect(message).toMatch(/Screen Recording/i)
+    expect(message).toMatch(/enable Chop/i)
   })
 
   it('returns an empty message when granted', () => {

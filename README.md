@@ -9,8 +9,8 @@ one click, mark it up, and get it into the clipboard or a folder.
     npm run package
 
 The macOS build is ad-hoc signed. On first launch, right-click the app and choose
-Open to get past Gatekeeper, then grant Screen Recording permission in
-System Settings → Privacy & Security → Screen Recording and relaunch.
+Open to get past Gatekeeper. The first capture asks for Screen Recording
+permission; enable Chop in System Settings and relaunch.
 
 ## Use
 
