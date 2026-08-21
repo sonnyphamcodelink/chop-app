@@ -2,7 +2,7 @@ import { app } from 'electron'
 import { showAboutChop } from './about'
 import { runCaptureFlow } from './capture/capture-flow'
 import { warmOverlays } from './capture/overlay-manager'
-import { getEditorWindow, sendCapture } from './editor-window'
+import { getEditorWindow, sendCapture, showEditorWindow } from './editor-window'
 import { captureShortcut, registerHotkeys, unregisterHotkeys } from './hotkeys'
 import { registerEditorHandlers } from './ipc/editor-handlers'
 import { registerFeedbackHandlers } from './ipc/feedback-handlers'
@@ -37,7 +37,7 @@ async function capture(): Promise<void> {
 if (!app.requestSingleInstanceLock()) {
   app.quit()
 } else {
-  app.on('second-instance', () => getEditorWindow().focus())
+  app.on('second-instance', showEditorWindow)
 
   void app.whenReady().then(() => {
     // Tests point this at a temp directory so they never touch ~/Pictures.
@@ -68,7 +68,7 @@ if (!app.requestSingleInstanceLock()) {
     tray = createTray({
       onAbout: showAboutChop,
       onCapture: () => void capture(),
-      onOpenEditor: () => getEditorWindow().show(),
+      onOpenEditor: showEditorWindow,
       onOpenSettings: () => openSettingsWindow(),
       onOpenLicense: () => openSettingsWindow('license'),
       onSendFeedback: () => openSettingsWindow('feedback'),
@@ -83,12 +83,16 @@ if (!app.requestSingleInstanceLock()) {
     void warmOverlays()
     getEditorWindow()
 
+    // Chop is a regular Dock app as well as a menu-bar app. Keep its Dock icon
+    // available even while all of its windows are hidden.
+    void app.dock?.show()
+
     // A dev build always looks stale against the newest release, so it never asks.
     if (app.isPackaged) {
       setTimeout(() => void checkForUpdates({ silent: true }), 1500)
     }
 
-    app.on('activate', () => getEditorWindow().show())
+    app.on('activate', showEditorWindow)
   })
 
   // Closing the editor leaves Chop running in the menu bar, so the hotkey keeps working.

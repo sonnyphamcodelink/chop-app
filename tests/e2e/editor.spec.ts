@@ -588,3 +588,49 @@ test('the tray keeps the app alive after the editor closes', async () => {
   )
   expect(remaining).toBe(0)
 })
+
+test('closing the editor keeps it available from the Dock on macOS', async () => {
+  test.skip(process.platform !== 'darwin')
+
+  await app.firstWindow()
+  await expect
+    .poll(() =>
+      app.evaluate(({ BrowserWindow }) =>
+        BrowserWindow.getAllWindows().some((window) => window.getTitle() === 'Chop'),
+      ),
+    )
+    .toBe(true)
+
+  await app.evaluate(({ app: electronApp }) => {
+    electronApp.emit('activate')
+  })
+
+  await app.evaluate(({ BrowserWindow }) => {
+    BrowserWindow.getAllWindows().find((window) => window.getTitle() === 'Chop')?.close()
+  })
+
+  await expect
+    .poll(() =>
+      app.evaluate(({ BrowserWindow }) => {
+        const editors = BrowserWindow.getAllWindows().filter(
+          (window) => window.getTitle() === 'Chop',
+        )
+        return { count: editors.length, visible: editors[0]?.isVisible() }
+      }),
+    )
+    .toEqual({ count: 1, visible: false })
+
+  await app.evaluate(({ app: electronApp }) => {
+    electronApp.emit('activate')
+  })
+
+  await expect
+    .poll(() =>
+      app.evaluate(({ BrowserWindow }) =>
+        BrowserWindow.getAllWindows()
+          .find((window) => window.getTitle() === 'Chop')
+          ?.isVisible(),
+      ),
+    )
+    .toBe(true)
+})
