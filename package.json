@@ -4,6 +4,12 @@
   "description": "Personal screen capture and annotation tool",
   "main": "out/main/index.js",
   "type": "module",
+  "license": "MIT",
+  "author": "Sonny Pham",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sonnyphamcodelink/chop-app.git"
+  },
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",

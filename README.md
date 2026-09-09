@@ -1,5 +1,7 @@
 # Chop
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 A personal screen capture and annotation tool. Capture a region or a window with
 one click, mark it up, and get it into the clipboard or a folder.
 
@@ -21,7 +23,14 @@ permission; enable Chop in System Settings and relaunch.
 - Captures auto-save to `~/Pictures/Chop`; past captures appear in the filmstrip
   and reopen fully editable
 
-## Licensing
+## License
+
+Chop's source is MIT licensed — see [LICENSE](LICENSE). That covers the code
+only; it's separate from the paid activation system described next, which is
+Chop's own product and stays enabled in official builds. Anyone building from
+source can mint their own activation keys with `npm run license:keygen` below.
+
+## Activation
 
 Chop runs unrestricted for 30 days, then wants a licence key before it will
 capture again. Editing past captures is never blocked.
@@ -93,10 +102,10 @@ Automatic replacement requires Chop to be installed as `Chop.app` on a writable
 local volume. A copy launched directly from the DMG or through macOS App
 Translocation must first be moved to Applications.
 
-Because this repo is private, release metadata lives in a separate public repo,
-`sonnyphamcodelink/chop-releases` — see `RELEASES_REPO` in
-`src/main/updates/release-feed.ts`. Nothing but a public URL ships in the app,
-so there is no token to leak.
+Release metadata lives in a separate repo, `sonnyphamcodelink/chop-releases`
+— see `RELEASES_REPO` in `src/main/updates/release-feed.ts` — so that large
+build artifacts and release tags stay out of the source tree. Nothing but a
+public URL ships in the app, so there is no token to leak.
 
 To publish a release:
 
@@ -181,6 +190,13 @@ images, which would eat the storage quota.
 
 Platform-specific code that cannot run in CI is covered by
 `docs/manual-smoke-tests.md`.
+
+## Contributing
+
+Issues and pull requests are welcome. Run `npm test` and `npm run typecheck`
+before opening a PR — see [Develop](#develop) for the full command list. Keep
+PRs small and focused; that's much easier to review than one that reshapes
+several things at once.
 
 ## Brand
 

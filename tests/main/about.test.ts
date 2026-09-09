@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const setAboutPanelOptions = vi.fn()
+const focus = vi.fn()
 const showAboutPanel = vi.fn()
 
 vi.mock('electron', () => ({
@@ -9,6 +10,7 @@ vi.mock('electron', () => ({
     getAppPath: () => '/app',
     getVersion: () => '1.2.3',
     setAboutPanelOptions,
+    focus,
     showAboutPanel,
   },
 }))
@@ -17,6 +19,7 @@ const { showAboutChop } = await import('../../src/main/about')
 
 beforeEach(() => {
   setAboutPanelOptions.mockClear()
+  focus.mockClear()
   showAboutPanel.mockClear()
   vi.useFakeTimers()
   vi.setSystemTime(new Date('2026-08-18T00:00:00.000Z'))
@@ -35,6 +38,10 @@ describe('showAboutChop', () => {
       copyright: '© 2026 Chop',
       iconPath: '/app/build/icon.png',
     })
+    expect(focus).toHaveBeenCalledWith({ steal: true })
     expect(showAboutPanel).toHaveBeenCalledOnce()
+    expect(focus.mock.invocationCallOrder[0]).toBeLessThan(
+      showAboutPanel.mock.invocationCallOrder[0] ?? 0,
+    )
   })
 })

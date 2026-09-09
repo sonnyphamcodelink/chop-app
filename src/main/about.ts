@@ -17,5 +17,10 @@ export function showAboutChop(): void {
     // Used by Windows and Linux; macOS reads the icon from the app bundle.
     iconPath: iconPath(),
   })
+
+  // Tray-menu clicks do not activate a macOS app on their own. Without this,
+  // the native panel stays hidden until another action (such as opening the
+  // editor) brings Chop to the foreground.
+  app.focus({ steal: true })
   app.showAboutPanel()
 }
