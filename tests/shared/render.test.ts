@@ -84,6 +84,20 @@ describe('renderDocument', () => {
     expect(names).toContain('fill')
   })
 
+  it('keeps a short arrow head between its start and tip', () => {
+    const { ctx, ops } = createMockContext()
+    const arrow: Annotation = {
+      id: 'short', kind: 'arrow',
+      from: { x: 0, y: 0 }, to: { x: 20, y: 0 },
+      color: '#00ff00', strokeWidth: 10,
+    }
+    renderDocument(ctx, image, addAnnotation(createDocument('d', 100, 100), arrow), factory())
+    const arrowXs = ops
+      .filter((op) => op.name === 'lineTo')
+      .map((op) => op.args[0] as number)
+    expect(arrowXs.every((x) => x >= 0 && x <= 20)).toBe(true)
+  })
+
   it('uses multiply compositing for the highlighter so text stays readable', () => {
     const { ctx, ops } = createMockContext()
     const highlight: Annotation = {
@@ -159,7 +173,7 @@ describe('renderDocument', () => {
     expect(ops.find((op) => op.name === 'fillText')?.args[0]).toBe('hello')
   })
 
-  it('fills a callout bubble and its tail in the annotation colour', () => {
+  it('draws a callout bubble with an arrow in the annotation colour', () => {
     const { ctx, ops } = createMockContext()
     const callout: Annotation = {
       id: 'c', kind: 'callout',
@@ -168,26 +182,37 @@ describe('renderDocument', () => {
       text: 'look here', color: '#ff3b30', fontSize: 18,
     }
     renderDocument(ctx, image, addAnnotation(createDocument('d', 800, 600), callout), factory())
+    expect(ops).toContainEqual({ name: 'set:strokeStyle', args: ['#ff3b30'] })
     expect(ops).toContainEqual({ name: 'set:fillStyle', args: ['#ff3b30'] })
-    // The tail tip is drawn as part of a filled triangle.
-    expect(ops).toContainEqual({ name: 'lineTo', args: [140, 200] })
+    expect(opNames(ops)).toContain('stroke')
     expect(opNames(ops).filter((name) => name === 'fill').length).toBeGreaterThanOrEqual(2)
   })
 
-  it('starts the tail on the bubble\u2019s bottom edge, so the two shapes meet flush', () => {
+  it('makes the callout arrow heavier than a standalone arrow at the same toolbar width', () => {
+    const { ctx, ops } = createMockContext()
+    const callout: Annotation = {
+      id: 'c', kind: 'callout',
+      rect: { x: 80, y: 40, width: 200, height: 80 },
+      tail: { x: 20, y: 180 },
+      text: '', color: '#ff3b30', fontSize: 18, strokeWidth: 10,
+    }
+    renderDocument(ctx, image, addAnnotation(createDocument('d', 800, 600), callout), factory())
+    expect(ops).toContainEqual({ name: 'set:lineWidth', args: [18] })
+  })
+
+  it('reattaches the arrow to the nearest bubble edge', () => {
     const { ctx, ops } = createMockContext()
     const callout: Annotation = {
       id: 'c', kind: 'callout',
       rect: { x: 40, y: 40, width: 200, height: 80 },
-      tail: { x: 300, y: 260 },
+      tail: { x: 300, y: 80 },
       text: '', color: '#ff3b30', fontSize: 18,
     }
     renderDocument(ctx, image, addAnnotation(createDocument('d', 800, 600), callout), factory())
-    // moveTo starts the triangle; the bubble path that follows starts elsewhere.
+    // The first move starts the arrow at the nearest point on the right edge.
     const [baseX, baseY] = ops.find((op) => op.name === 'moveTo')!.args as [number, number]
-    expect(baseY).toBe(120)
-    expect(baseX).toBeGreaterThanOrEqual(40)
-    expect(baseX).toBeLessThan(140)
+    expect(baseX).toBe(240)
+    expect(baseY).toBe(80)
   })
 
   it('draws callout text in a colour that contrasts with the bubble', () => {

@@ -1,4 +1,4 @@
-import { calloutBadgeRect, hideCalloutText } from '@shared/callout'
+import { hideCalloutText } from '@shared/callout'
 import { backingScale, fitScale, imageToView, viewToImage } from '@shared/canvas-mapping'
 import { cropBounds } from '@shared/crop-session'
 import { type CaptureDocument, outputSize } from '@shared/document'
@@ -48,10 +48,10 @@ export type CanvasView = {
 }
 
 const SELECTION_COLOR = '#2f9bff'
-/** Dark chip behind the callout delete cross, so it reads on any bubble colour. */
-const BADGE_COLOR = 'rgba(0, 0, 0, 0.7)'
 /** Resize handles stay subtle and the same size on screen at every zoom level. */
 const RESIZE_HANDLE_RADIUS = 3.5
+const CALLOUT_TAIL_HANDLE_COLOR = '#ffdf00'
+const CALLOUT_TAIL_HANDLE_RADIUS = 5
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max)
@@ -73,6 +73,27 @@ export function drawResizeHandle(
   ctx.lineWidth = 1 / safeScale
   ctx.beginPath()
   ctx.arc(center.x, center.y, resizeHandleRadius(safeScale), 0, Math.PI * 2)
+  ctx.fill()
+  ctx.stroke()
+}
+
+/** Draws the callout's single yellow arrow-tip handle as a Snagit-style diamond. */
+export function drawCalloutTailHandle(
+  ctx: CanvasRenderingContext2D,
+  center: Point,
+  scale: number,
+): void {
+  const safeScale = scale > 0 ? scale : 1
+  const radius = CALLOUT_TAIL_HANDLE_RADIUS / safeScale
+  ctx.fillStyle = CALLOUT_TAIL_HANDLE_COLOR
+  ctx.strokeStyle = '#000000'
+  ctx.lineWidth = 1 / safeScale
+  ctx.beginPath()
+  ctx.moveTo(center.x, center.y - radius)
+  ctx.lineTo(center.x + radius, center.y)
+  ctx.lineTo(center.x, center.y + radius)
+  ctx.lineTo(center.x - radius, center.y)
+  ctx.closePath()
   ctx.fill()
   ctx.stroke()
 }
@@ -209,8 +230,7 @@ export function createCanvasView(canvas: HTMLCanvasElement): CanvasView {
     if (doc.cropRect) ctx.translate(-doc.cropRect.x, -doc.cropRect.y)
 
     if (annotation.kind === 'callout') {
-      // The same handles as the crop frame. The tail has none: it follows the
-      // bubble rather than being aimed.
+      // Eight white handles resize the body; the yellow handle re-aims the arrow.
       for (const handle of handleRects(annotation.rect)) {
         drawResizeHandle(
           ctx,
@@ -221,27 +241,7 @@ export function createCanvasView(canvas: HTMLCanvasElement): CanvasView {
           scale,
         )
       }
-
-      const badge = calloutBadgeRect(annotation.rect, scale)
-      const radius = badge.width / 2
-      const centre = { x: badge.x + radius, y: badge.y + radius }
-
-      ctx.fillStyle = BADGE_COLOR
-      ctx.beginPath()
-      ctx.arc(centre.x, centre.y, radius, 0, Math.PI * 2)
-      ctx.fill()
-
-      // A cross, drawn rather than typed, so it does not depend on a font.
-      const arm = radius * 0.42
-      ctx.strokeStyle = '#ffffff'
-      ctx.lineWidth = Math.max(1 / scale, radius * 0.18)
-      ctx.lineCap = 'round'
-      ctx.beginPath()
-      ctx.moveTo(centre.x - arm, centre.y - arm)
-      ctx.lineTo(centre.x + arm, centre.y + arm)
-      ctx.moveTo(centre.x + arm, centre.y - arm)
-      ctx.lineTo(centre.x - arm, centre.y + arm)
-      ctx.stroke()
+      drawCalloutTailHandle(ctx, annotation.tail, scale)
     } else if (isEditableAnnotation(annotation)) {
       for (const handle of annotationHandleRects(annotation)) {
         drawResizeHandle(

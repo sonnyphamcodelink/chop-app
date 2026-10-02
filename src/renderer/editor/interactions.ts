@@ -51,8 +51,6 @@ export type InteractionHandlers = {
   onTextPoint(event: MouseEvent, imagePoint: Point): void
   /** A callout was clicked, to write or rewrite its note. */
   onCalloutEdit(callout: CalloutAnnotation): void
-  /** A callout's delete badge was clicked. */
-  onCalloutDelete(callout: CalloutAnnotation): void
 }
 
 type Gesture =
@@ -77,6 +75,13 @@ type Gesture =
       readonly origin: CaptureDocument
     }
   | {
+      readonly mode: 'callout-tail'
+      readonly callout: CalloutAnnotation
+      readonly origin: CaptureDocument
+      readonly start: Point
+      readonly moved: boolean
+    }
+  | {
       readonly mode: 'annotation-move'
       readonly annotation: EditableAnnotation
       readonly origin: CaptureDocument
@@ -98,10 +103,10 @@ function newId(): string {
   return crypto.randomUUID()
 }
 
-/** The pointer a callout's parts ask for: delete, resize, move. */
+/** The pointer a callout's parts ask for: re-aim, resize, move. */
 function calloutCursor(hit: CalloutHit): CursorHit {
   switch (hit.part) {
-    case 'badge':
+    case 'tail':
       return { kind: 'pointer' }
     case 'handle':
       return { kind: 'resize', cursor: cursorForHandle(hit.handle) }
@@ -141,17 +146,24 @@ export function attachInteractions(
     const point = view.toImagePoint(event, state)
 
     if (shapesInteractive(state)) {
-      // Callouts answer first: badge deletes, bubble moves or opens for typing.
+      // Callouts answer first: the yellow tip re-aims, handles resize, and the
+      // bubble moves or opens for typing.
       const calloutHit = calloutHitAtPoint(currentDocument(state), point, view.scale())
-      if (calloutHit?.part === 'badge') {
-        event.preventDefault()
-        handlers.onCalloutDelete(calloutHit.callout)
-        return
-      }
       if (calloutHit) {
         event.preventDefault()
         const origin = currentDocument(state)
         store.set(setSelectedAnnotation(state, calloutHit.callout.id))
+        if (calloutHit.part === 'tail') {
+          canvas.style.cursor = canvasCursor({ kind: 'pointer' })
+          gesture = {
+            mode: 'callout-tail',
+            callout: calloutHit.callout,
+            origin,
+            start: point,
+            moved: false,
+          }
+          return
+        }
         if (calloutHit.part === 'handle') {
           canvas.style.cursor = canvasCursor({
             kind: 'resize',
@@ -299,6 +311,24 @@ export function attachInteractions(
       return
     }
 
+    if (gesture.mode === 'callout-tail') {
+      const moved =
+        gesture.moved ||
+        Math.hypot(point.x - gesture.start.x, point.y - gesture.start.y) * view.scale() >
+          CALLOUT_DRAG_THRESHOLD
+      if (!moved) return
+      store.set(
+        previewDocument(
+          state,
+          updateAnnotation(currentDocument(state), gesture.callout.id, (annotation) =>
+            annotation.kind === 'callout' ? { ...annotation, tail: point } : annotation,
+          ),
+        ),
+      )
+      gesture = { ...gesture, moved: true }
+      return
+    }
+
     if (gesture.mode === 'annotation-move') {
       const dx = point.x - gesture.last.x
       const dy = point.y - gesture.last.y
@@ -422,12 +452,14 @@ export function attachInteractions(
     if (
       finished.mode === 'annotation-move' ||
       finished.mode === 'annotation-resize' ||
-      finished.mode === 'callout-resize'
+      finished.mode === 'callout-resize' ||
+      finished.mode === 'callout-tail'
     ) {
       // A click on an annotation selects it; a drag applies the change. Either
       // way the preview resolves to the document, but only the drag commits it.
       if (finished.mode === 'annotation-move' && !finished.moved) return
       if (finished.mode === 'annotation-resize' && !finished.moved) return
+      if (finished.mode === 'callout-tail' && !finished.moved) return
       store.set(commitPreview(state, finished.origin))
       return
     }
@@ -446,11 +478,12 @@ export function attachInteractions(
       // a stray click on the capture should not litter it with empty bubbles.
       const doc = currentDocument(state)
       const annotation = draftToAnnotation(state.draft, state.style, newId(), outputSize(doc))
-      store.set(
-        annotation
-          ? commitDocument(state, addAnnotation(doc, annotation))
-          : setDraft(state, null),
-      )
+      if (!annotation) {
+        store.set(setDraft(state, null))
+        return
+      }
+      store.set(commitDocument(state, addAnnotation(doc, annotation)))
+      if (annotation.kind === 'callout') handlers.onCalloutEdit(annotation)
       return
     }
 
@@ -467,11 +500,13 @@ export function attachInteractions(
     // Leaving mid-move keeps the shape where it got to, as one history entry.
     if (
       abandoned.mode === 'callout-move' ||
+      abandoned.mode === 'callout-tail' ||
       abandoned.mode === 'annotation-move' ||
       abandoned.mode === 'annotation-resize'
     ) {
       if (
         (abandoned.mode === 'callout-move' ||
+          abandoned.mode === 'callout-tail' ||
           abandoned.mode === 'annotation-move' ||
           abandoned.mode === 'annotation-resize') &&
         !abandoned.moved

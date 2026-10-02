@@ -1,5 +1,11 @@
 import { calloutFontSizeFor, calloutRectFor, defaultCalloutSize } from './callout'
-import { DEFAULT_FONT_SIZE, DEFAULT_STROKE_WIDTH, MIN_SELECTION_DIMENSION } from './constants'
+import {
+  CALLOUT_ARROW_WIDTH_MULTIPLIER,
+  CALLOUT_MIN_TAIL_LENGTH,
+  DEFAULT_FONT_SIZE,
+  DEFAULT_STROKE_WIDTH,
+  MIN_SELECTION_DIMENSION,
+} from './constants'
 import { type Annotation, type CalloutAnnotation, type CaptureDocument, outputSize } from './document'
 import { isDegenerateRect, normalizeRect, type Point, type Rect, type Size } from './geometry'
 
@@ -65,6 +71,7 @@ export function createCallout(
     text: '',
     color: style.color,
     fontSize: calloutFontSizeFor(rect),
+    strokeWidth: style.strokeWidth,
   }
 }
 
@@ -80,12 +87,11 @@ export function draftToAnnotation(
   id: string,
   view: Size,
 ): Annotation | null {
-  // A callout is aimed rather than drawn out: the press marks what the note
-  // points at and the release places the bubble, so how far the pointer
-  // travelled is all that says whether this was a drag at all.
+  // The press fixes the arrow tip on its target. Dragging back places the
+  // bubble beyond the release point, so the arrow never crosses its body.
   if (draft.tool === 'callout') {
     const travel = Math.hypot(draft.current.x - draft.start.x, draft.current.y - draft.start.y)
-    if (travel < MIN_SELECTION_DIMENSION) return null
+    if (travel < CALLOUT_MIN_TAIL_LENGTH) return null
     const { width, height } = defaultCalloutSize(view, style.fontSize)
     return createCallout(
       calloutRectFor(draft.start, draft.current, width, height),
@@ -127,6 +133,23 @@ export function documentWithDraft(
 ): CaptureDocument {
   if (!draft) return doc
   const annotation = draftToAnnotation(draft, style, DRAFT_ANNOTATION_ID, outputSize(doc))
-  if (!annotation) return doc
+  if (!annotation) {
+    const moved = draft.start.x !== draft.current.x || draft.start.y !== draft.current.y
+    if (draft.tool !== 'callout' || !moved) return doc
+    return {
+      ...doc,
+      annotations: [
+        ...doc.annotations,
+        {
+          id: DRAFT_ANNOTATION_ID,
+          kind: 'arrow',
+          from: draft.current,
+          to: draft.start,
+          color: style.color,
+          strokeWidth: style.strokeWidth * CALLOUT_ARROW_WIDTH_MULTIPLIER,
+        },
+      ],
+    }
+  }
   return { ...doc, annotations: [...doc.annotations, annotation] }
 }

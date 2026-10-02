@@ -50,6 +50,8 @@ export type CalloutAnnotation = {
   readonly text: string
   readonly color: string
   readonly fontSize: number
+  /** Arrow shaft width. Older saved callouts fall back to the default width. */
+  readonly strokeWidth?: number
 }
 
 export type Annotation =

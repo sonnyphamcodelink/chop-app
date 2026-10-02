@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest'
-import { tailBase } from '@shared/callout'
 import { type CalloutAnnotation, createDocument } from '@shared/document'
 import {
   CALLOUT_DEFAULT_ASPECT,
@@ -97,8 +96,8 @@ describe('draftToAnnotation', () => {
 })
 
 describe('callouts', () => {
-  /** Aim at (200, 300), then let go up and to the right at (260, 200). */
-  const aimed = updateDraft(beginDraft('callout', { x: 200, y: 300 }), { x: 260, y: 200 })
+  /** Fix the arrow tip at (140, 400), then drag back to place its bubble. */
+  const aimed = updateDraft(beginDraft('callout', { x: 140, y: 400 }), { x: 200, y: 300 })
 
   function builtFrom(draft: Draft): CalloutAnnotation {
     const annotation = draftToAnnotation(draft, style, 'a9', view)
@@ -110,15 +109,13 @@ describe('callouts', () => {
     expect(builtFrom(aimed)).toMatchObject({ id: 'a9', text: '', color: '#ff3b30' })
   })
 
-  it('pins the tail tip to the press, so the note points at what was clicked', () => {
-    expect(builtFrom(aimed).tail).toEqual({ x: 200, y: 300 })
+  it('keeps the arrow tip fixed at the press point', () => {
+    expect(builtFrom(aimed).tail).toEqual({ x: 140, y: 400 })
   })
 
-  it('hangs the bubble above the release point rather than sizing it from the drag', () => {
+  it('places the bubble beyond the release point, away from the arrow tip', () => {
     const { rect } = builtFrom(aimed)
-    const [left, right] = tailBase(rect)
-    expect((left.x + right.x) / 2).toBeCloseTo(260)
-    expect(rect.y + rect.height).toBe(200)
+    expect({ x: rect.x, y: rect.y + rect.height }).toEqual({ x: 200, y: 300 })
   })
 
   it('sizes the bubble to the capture, so a note lands usable without resizing', () => {
@@ -135,9 +132,18 @@ describe('callouts', () => {
     expect(large.fontSize).toBeGreaterThan(style.fontSize)
   })
 
-  it('builds nothing from a click with no real drag, so a stray click adds no bubble', () => {
-    const click = updateDraft(beginDraft('callout', { x: 200, y: 300 }), { x: 201, y: 301 })
-    expect(draftToAnnotation(click, style, 'c2', view)).toBeNull()
+  it('builds nothing until the arrow reaches the minimum useful length', () => {
+    const short = updateDraft(beginDraft('callout', { x: 200, y: 300 }), { x: 227, y: 300 })
+    const longEnough = updateDraft(
+      beginDraft('callout', { x: 200, y: 300 }),
+      { x: 228, y: 300 },
+    )
+    expect(draftToAnnotation(short, style, 'c2', view)).toBeNull()
+    expect(draftToAnnotation(longEnough, style, 'c3', view)?.kind).toBe('callout')
+  })
+
+  it('uses the active stroke width for the callout arrow', () => {
+    expect(builtFrom(aimed).strokeWidth).toBe(style.strokeWidth)
   })
 })
 
@@ -189,5 +195,30 @@ describe('documentWithDraft', () => {
     const next = documentWithDraft(withBox, drag('arrow'), style)
     expect(next.annotations.map((a) => a.id)).toEqual(['existing', '__draft__'])
     expect(next.annotations[1]?.kind).toBe('arrow')
+  })
+
+  it('previews only an arrow while a callout drag is still too short to place', () => {
+    const short = updateDraft(
+      beginDraft('callout', { x: 80, y: 90 }),
+      { x: 100, y: 90 },
+    )
+    expect(documentWithDraft(doc, short, style).annotations).toEqual([
+      {
+        id: '__draft__',
+        kind: 'arrow',
+        from: { x: 100, y: 90 },
+        to: { x: 80, y: 90 },
+        color: style.color,
+        strokeWidth: 5.4,
+      },
+    ])
+  })
+
+  it('previews the complete callout once its arrow is long enough', () => {
+    const longEnough = updateDraft(
+      beginDraft('callout', { x: 80, y: 90 }),
+      { x: 108, y: 90 },
+    )
+    expect(documentWithDraft(doc, longEnough, style).annotations[0]?.kind).toBe('callout')
   })
 })

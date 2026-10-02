@@ -1,8 +1,10 @@
-import { calloutTextWidth, readableTextColor, tailTriangle, wrapText } from './callout'
+import { calloutTextWidth, readableTextColor, tailBase, wrapText } from './callout'
 import {
   BLUR_SAMPLE_SIZE,
+  CALLOUT_ARROW_WIDTH_MULTIPLIER,
   CALLOUT_CORNER_RADIUS,
   CALLOUT_LINE_HEIGHT_RATIO,
+  DEFAULT_STROKE_WIDTH,
 } from './constants'
 import type {
   Annotation,
@@ -36,36 +38,48 @@ function drawBox(ctx: CanvasRenderingContext2D, box: BoxAnnotation): void {
   ctx.strokeRect(box.rect.x, box.rect.y, box.rect.width, box.rect.height)
 }
 
-function drawArrow(ctx: CanvasRenderingContext2D, arrow: ArrowAnnotation): void {
-  const headLength = arrow.strokeWidth * ARROW_HEAD_RATIO
-  const angle = Math.atan2(arrow.to.y - arrow.from.y, arrow.to.x - arrow.from.x)
+function drawArrowBetween(
+  ctx: CanvasRenderingContext2D,
+  from: { readonly x: number; readonly y: number },
+  to: { readonly x: number; readonly y: number },
+  color: string,
+  strokeWidth: number,
+): void {
+  const distance = Math.hypot(to.x - from.x, to.y - from.y)
+  const preferredHeadLength = strokeWidth * ARROW_HEAD_RATIO
+  const headLength = Math.min(preferredHeadLength, distance * 0.55)
+  const angle = Math.atan2(to.y - from.y, to.x - from.x)
 
-  ctx.strokeStyle = arrow.color
-  ctx.fillStyle = arrow.color
-  ctx.lineWidth = arrow.strokeWidth
+  ctx.strokeStyle = color
+  ctx.fillStyle = color
+  ctx.lineWidth = strokeWidth
   ctx.lineJoin = 'round'
 
   // Stop the shaft short of the tip so the head has a clean point.
-  const shaftEndX = arrow.to.x - Math.cos(angle) * headLength * 0.8
-  const shaftEndY = arrow.to.y - Math.sin(angle) * headLength * 0.8
+  const shaftEndX = to.x - Math.cos(angle) * headLength * 0.8
+  const shaftEndY = to.y - Math.sin(angle) * headLength * 0.8
 
   ctx.beginPath()
-  ctx.moveTo(arrow.from.x, arrow.from.y)
+  ctx.moveTo(from.x, from.y)
   ctx.lineTo(shaftEndX, shaftEndY)
   ctx.stroke()
 
   ctx.beginPath()
-  ctx.moveTo(arrow.to.x, arrow.to.y)
+  ctx.moveTo(to.x, to.y)
   ctx.lineTo(
-    arrow.to.x - Math.cos(angle - Math.PI / 7) * headLength,
-    arrow.to.y - Math.sin(angle - Math.PI / 7) * headLength,
+    to.x - Math.cos(angle - Math.PI / 7) * headLength,
+    to.y - Math.sin(angle - Math.PI / 7) * headLength,
   )
   ctx.lineTo(
-    arrow.to.x - Math.cos(angle + Math.PI / 7) * headLength,
-    arrow.to.y - Math.sin(angle + Math.PI / 7) * headLength,
+    to.x - Math.cos(angle + Math.PI / 7) * headLength,
+    to.y - Math.sin(angle + Math.PI / 7) * headLength,
   )
   ctx.closePath()
   ctx.fill()
+}
+
+function drawArrow(ctx: CanvasRenderingContext2D, arrow: ArrowAnnotation): void {
+  drawArrowBetween(ctx, arrow.from, arrow.to, arrow.color, arrow.strokeWidth)
 }
 
 function drawHighlight(
@@ -118,8 +132,8 @@ function traceRoundedRect(ctx: CanvasRenderingContext2D, rect: Rect, radius: num
 }
 
 /**
- * A filled bubble plus a tail, both in the annotation colour so they read as one
- * shape, with the text wrapped to the bubble and centred inside it.
+ * A filled bubble plus an arrow, both in the annotation colour, with the text
+ * wrapped and centred inside the bubble.
  */
 function drawCallout(ctx: CanvasRenderingContext2D, callout: CalloutAnnotation): void {
   const { rect } = callout
@@ -127,13 +141,13 @@ function drawCallout(ctx: CanvasRenderingContext2D, callout: CalloutAnnotation):
   ctx.save()
   ctx.fillStyle = callout.color
 
-  const [baseLeft, tip, baseRight] = tailTriangle(rect, callout.tail)
-  ctx.beginPath()
-  ctx.moveTo(baseLeft.x, baseLeft.y)
-  ctx.lineTo(tip.x, tip.y)
-  ctx.lineTo(baseRight.x, baseRight.y)
-  ctx.closePath()
-  ctx.fill()
+  drawArrowBetween(
+    ctx,
+    tailBase(rect, callout.tail),
+    callout.tail,
+    callout.color,
+    (callout.strokeWidth ?? DEFAULT_STROKE_WIDTH) * CALLOUT_ARROW_WIDTH_MULTIPLIER,
+  )
 
   traceRoundedRect(ctx, rect, CALLOUT_CORNER_RADIUS)
   ctx.fill()

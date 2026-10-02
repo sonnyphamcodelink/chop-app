@@ -1,15 +1,10 @@
 import {
-  CALLOUT_BADGE_SIZE,
   CALLOUT_DEFAULT_ASPECT,
   CALLOUT_DEFAULT_WIDTH_SHARE,
   CALLOUT_FONT_HEIGHT_RATIO,
   CALLOUT_LINE_HEIGHT_RATIO,
   CALLOUT_MIN_FONT_SIZE,
-  CALLOUT_MIN_TAIL_LENGTH,
-  CALLOUT_MIN_TAIL_WIDTH,
   CALLOUT_PADDING,
-  CALLOUT_TAIL_INSET,
-  CALLOUT_TAIL_WIDTH_RATIO,
 } from './constants'
 import { type CalloutAnnotation, type CaptureDocument, updateAnnotation } from './document'
 import { type Point, type Rect, rectsEqual, type Size } from './geometry'
@@ -19,54 +14,50 @@ export function calloutTextWidth(rectWidth: number): number {
   return Math.max(1, rectWidth - CALLOUT_PADDING * 2)
 }
 
-/** Bubble edge point, tail tip, bubble edge point. */
-export type TailTriangle = readonly [Point, Point, Point]
-
 /**
- * The footprint the tail leaves the bubble from: a fixed span on the bottom
- * edge, near the left corner. Sitting on the edge itself is what keeps the tail
- * and the bubble flush, whichever way the tail happens to point.
+ * The point where the arrow leaves the bubble. Outside points clamp to the
+ * nearest edge or corner. A tip inside the bubble uses its nearest edge.
  */
-export function tailBase(rect: Rect): readonly [Point, Point] {
-  const width = Math.min(
-    Math.max(CALLOUT_MIN_TAIL_WIDTH, rect.width * CALLOUT_TAIL_WIDTH_RATIO),
-    rect.width,
-  )
-  const inset = Math.min(CALLOUT_TAIL_INSET, rect.width - width)
+export function tailBase(rect: Rect, tail: Point): Point {
+  const left = rect.x
+  const top = rect.y
+  const right = rect.x + rect.width
   const bottom = rect.y + rect.height
-  return [
-    { x: rect.x + inset, y: bottom },
-    { x: rect.x + inset + width, y: bottom },
+  const clamp = (value: number, min: number, max: number): number =>
+    Math.min(Math.max(value, min), max)
+
+  if (tail.x <= left || tail.x >= right || tail.y <= top || tail.y >= bottom) {
+    return { x: clamp(tail.x, left, right), y: clamp(tail.y, top, bottom) }
+  }
+
+  const distances = [
+    { distance: tail.x - left, point: { x: left, y: tail.y } },
+    { distance: right - tail.x, point: { x: right, y: tail.y } },
+    { distance: tail.y - top, point: { x: tail.x, y: top } },
+    { distance: bottom - tail.y, point: { x: tail.x, y: bottom } },
   ]
-}
-
-/** The tip as drawn: never above the bottom edge, where it would point back through the bubble. */
-export function tailTip(rect: Rect, tail: Point): Point {
-  return { x: tail.x, y: Math.max(tail.y, rect.y + rect.height) }
-}
-
-/**
- * Where a bubble of this size goes for a callout aimed at `tip` and let go at
- * `at`: tail base under the pointer, bubble hanging above it. Never level with
- * or below the target, since the tail leaves the bottom edge and would have
- * nowhere to go.
- */
-export function calloutRectFor(tip: Point, at: Point, width: number, height: number): Rect {
-  const [left, right] = tailBase({ x: 0, y: 0, width, height })
-  const baseCentre = (left.x + right.x) / 2
-  const bottom = Math.min(at.y, tip.y - CALLOUT_MIN_TAIL_LENGTH)
-  return { x: at.x - baseCentre, y: bottom - height, width, height }
+  return distances.reduce((nearest, candidate) =>
+    candidate.distance < nearest.distance ? candidate : nearest,
+  ).point
 }
 
 /**
- * The tail as a triangle: a base on the bubble's bottom-left edge and a tip at
- * the target. Filled in the bubble colour, it reads as one shape. The tip is
- * anchored to what the note points at, so moving the bubble stretches the tail
- * rather than dragging the target along with it.
+ * Places a new bubble beyond the release point, in the direction of the drag.
+ * The fixed press point remains outside the bubble as its arrow tip, while the
+ * release point becomes the nearest attachment corner.
  */
-export function tailTriangle(rect: Rect, tail: Point): TailTriangle {
-  const [left, right] = tailBase(rect)
-  return [left, tailTip(rect, tail), right]
+export function calloutRectFor(
+  tip: Point,
+  at: Point,
+  width: number,
+  height: number,
+): Rect {
+  return {
+    x: at.x >= tip.x ? at.x : at.x - width,
+    y: at.y >= tip.y ? at.y : at.y - height,
+    width,
+    height,
+  }
 }
 
 /**
@@ -189,21 +180,6 @@ export function withCalloutText(
   return updateAnnotation(doc, id, (annotation) =>
     annotation.kind === 'callout' ? updateCalloutText(annotation, text, measurerFor) : annotation,
   )
-}
-
-/**
- * The delete badge, straddling the bubble's top-right corner. `scale` is CSS
- * pixels per image pixel, so the badge stays the same size however far the
- * image is zoomed. Editor chrome only: it is never part of the exported image.
- */
-export function calloutBadgeRect(rect: Rect, scale: number): Rect {
-  const size = CALLOUT_BADGE_SIZE / (scale > 0 ? scale : 1)
-  return {
-    x: rect.x + rect.width - size / 2,
-    y: rect.y - size / 2,
-    width: size,
-    height: size,
-  }
 }
 
 /**

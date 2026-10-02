@@ -1,4 +1,3 @@
-import { calloutBadgeRect, tailTip } from './callout'
 import { HANDLE_HIT_SIZE, HANDLE_SIZE } from './constants'
 import type {
   Annotation,
@@ -44,8 +43,8 @@ export function annotationBounds(annotation: Annotation): Rect {
     case 'arrow':
       return normalizeRect(annotation.from, annotation.to)
     case 'callout': {
-      // The tail is part of the shape, so it belongs inside the bounds.
-      const tip = tailTip(annotation.rect, annotation.tail)
+      // The arrow is part of the shape, so its tip belongs inside the bounds.
+      const tip = annotation.tail
       return normalizeRect(
         {
           x: Math.min(annotation.rect.x, tip.x),
@@ -83,11 +82,11 @@ export function annotationAtPoint(
 }
 
 /**
- * Which part of a callout the pointer is over: the delete badge, one of the
- * eight resize handles, or the bubble.
+ * Which part of a callout the pointer is over: the arrow tip, one of the eight
+ * resize handles, or the bubble.
  */
 export type CalloutHit =
-  | { readonly callout: CalloutAnnotation; readonly part: 'badge' | 'body' }
+  | { readonly callout: CalloutAnnotation; readonly part: 'tail' | 'body' }
   | {
       readonly callout: CalloutAnnotation
       readonly part: 'handle'
@@ -108,9 +107,9 @@ export function calloutHitAtPoint(
     const annotation = doc.annotations[index]!
     if (annotation.kind !== 'callout') continue
 
-    // The badge straddles the corner, so it is tested before the bubble.
-    if (rectContains(calloutBadgeRect(annotation.rect, scale), point)) {
-      return { callout: annotation, part: 'badge' }
+    const tailHitSize = HANDLE_HIT_SIZE / (scale > 0 ? scale : 1)
+    if (rectContains(squareAt(annotation.tail, tailHitSize), point)) {
+      return { callout: annotation, part: 'tail' }
     }
     const handle = handleAtPoint(annotation.rect, point, scale)
     if (handle) return { callout: annotation, part: 'handle', handle }

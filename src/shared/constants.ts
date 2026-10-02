@@ -41,19 +41,11 @@ export const CALLOUT_PADDING = 12
 /** Line spacing for wrapped callout text, as a multiple of font size. */
 export const CALLOUT_LINE_HEIGHT_RATIO = 1.3
 
-/** Tail base width, as a fraction of the bubble width. */
-export const CALLOUT_TAIL_WIDTH_RATIO = 0.2
-export const CALLOUT_MIN_TAIL_WIDTH = 14
-
-/**
- * How far the tail base sits from the bubble's left edge, in image pixels.
- * Wider than the corner radius, so the base meets a straight edge and the two
- * shapes read as one.
- */
-export const CALLOUT_TAIL_INSET = 14
-
 /** Shortest tail worth drawing: a new bubble is never placed closer than this to its target. */
 export const CALLOUT_MIN_TAIL_LENGTH = 28
+
+/** Callout arrows are deliberately heavier than standalone annotation arrows. */
+export const CALLOUT_ARROW_WIDTH_MULTIPLIER = 1.8
 
 /**
  * A bubble nobody sized by hand, as a share of the capture's visible width and
@@ -63,9 +55,6 @@ export const CALLOUT_MIN_TAIL_LENGTH = 28
  */
 export const CALLOUT_DEFAULT_WIDTH_SHARE = 0.4
 export const CALLOUT_DEFAULT_ASPECT = 4.5
-
-/** Edge length of a callout's delete badge as drawn, in canvas pixels. */
-export const CALLOUT_BADGE_SIZE = 22
 
 /**
  * Callout text is sized to fill its bubble rather than set by the toolbar, so a

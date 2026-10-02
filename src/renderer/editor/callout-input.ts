@@ -62,6 +62,9 @@ export function createCalloutInput(element: HTMLTextAreaElement): CalloutInput {
 
   function close(): void {
     pending = null
+    // Returning focus to the document lets Delete/Backspace act on the selected
+    // callout immediately after Enter or Escape closes the editor.
+    element.blur()
     element.value = ''
     element.style.display = 'none'
   }

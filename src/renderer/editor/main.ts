@@ -399,12 +399,6 @@ attachInteractions(canvas, view, store, {
   },
 
   onCalloutEdit: (callout) => startCalloutEdit(callout),
-
-  onCalloutDelete: (callout) => {
-    // A note being typed is abandoned: the bubble it belongs to is going away.
-    cancelCalloutEdit()
-    store.set(commitDocument(state, removeAnnotation(currentDocument(state), callout.id)))
-  },
 })
 
 function flattenToDataUrl(): string {

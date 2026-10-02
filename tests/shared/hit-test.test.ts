@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { CALLOUT_BADGE_SIZE, HANDLE_SIZE } from '@shared/constants'
+import { HANDLE_SIZE } from '@shared/constants'
 import { addAnnotation, type Annotation, createDocument } from '@shared/document'
 import { rectContains } from '@shared/geometry'
 import {
@@ -98,19 +98,17 @@ describe('calloutHitAtPoint', () => {
     })
   })
 
-  it('reports the delete badge at the top-right corner', () => {
-    // The badge straddles the corner, so its centre is the corner itself.
-    expect(calloutHitAtPoint(doc, { x: 300, y: 100 })).toMatchObject({
+  it('reports the arrow tip as its own draggable handle', () => {
+    expect(calloutHitAtPoint(doc, callout.tail)).toMatchObject({
       callout: { id: 'callout' },
-      part: 'badge',
+      part: 'tail',
     })
   })
 
-  it('keeps the badge the same size on screen however far the image is zoomed', () => {
-    // At half scale a badge covers twice as many image pixels.
-    const justOutside = { x: 300 + CALLOUT_BADGE_SIZE / 2 + 1, y: 100 }
+  it('keeps the arrow-tip grab area the same size on screen at every zoom', () => {
+    const justOutside = { x: callout.tail.x + 13, y: callout.tail.y }
     expect(calloutHitAtPoint(doc, justOutside, 1)).toBeNull()
-    expect(calloutHitAtPoint(doc, justOutside, 0.5)?.part).toBe('badge')
+    expect(calloutHitAtPoint(doc, justOutside, 0.5)?.part).toBe('tail')
   })
 
   it('returns the front-most callout when two bubbles overlap', () => {

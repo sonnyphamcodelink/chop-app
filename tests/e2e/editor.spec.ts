@@ -316,7 +316,7 @@ async function savedBox(): Promise<{
   return found as never
 }
 
-test('a callout can be dragged around the capture and deleted from its badge', async () => {
+test('a callout box and arrow tip can move independently', async () => {
   await sendCapture({
     id: 'e2e-callout-move',
     dataUrl: ONE_PIXEL_PNG,
@@ -332,9 +332,9 @@ test('a callout can be dragged around the capture and deleted from its badge', a
   const box = await page.locator('#canvas').boundingBox()
   if (!box) throw new Error('canvas has no bounding box')
 
-  // Press on what the note is about, release where the note should sit: the
-  // press fixes the arrow tip, the release hangs the bubble above it.
-  await page.mouse.move(box.x + 200, box.y + 250)
+  // Press fixes the arrow tip on its target. Dragging back places the bubble;
+  // the yellow tip must not follow the pointer.
+  await page.mouse.move(box.x + 80, box.y + 250)
   await page.mouse.down()
   await page.mouse.move(box.x + 120, box.y + 150, { steps: 10 })
   await page.mouse.up()
@@ -343,7 +343,8 @@ test('a callout can be dragged around the capture and deleted from its badge', a
     .poll(async () => (await savedCallout())?.rect.width, { timeout: 10_000 })
     .toBeGreaterThan(0)
   const drawn = await savedCallout()
-  expect(drawn.tail).toEqual({ x: 200, y: 250 })
+  expect(drawn.tail).toEqual({ x: 80, y: 250 })
+  expect(drawn.rect.x).toBeCloseTo(120, 0)
   expect(drawn.rect.y + drawn.rect.height).toBeCloseTo(150, 0)
 
   // A click with no drag aims at nothing, so it leaves the capture alone.
@@ -378,11 +379,23 @@ test('a callout can be dragged around the capture and deleted from its badge', a
     .poll(async () => (await savedCallout())?.rect.x, { timeout: 10_000 })
     .toBeCloseTo(drawn.rect.x, 0)
 
-  // The badge straddles the bubble's top-right corner.
-  await page.mouse.click(
-    box.x + drawn.rect.x + drawn.rect.width,
-    box.y + drawn.rect.y,
-  )
+  // The yellow tip handle changes the arrow's direction and length without
+  // moving the callout box.
+  await page.mouse.move(box.x + drawn.tail.x, box.y + drawn.tail.y)
+  await page.mouse.down()
+  await page.mouse.move(box.x + drawn.tail.x + 40, box.y + drawn.tail.y - 30, { steps: 10 })
+  await page.mouse.up()
+  await expect
+    .poll(async () => (await savedCallout())?.tail.x, { timeout: 10_000 })
+    .toBeCloseTo(drawn.tail.x + 40, 0)
+  const reaimed = await savedCallout()
+  expect(reaimed.tail.y).toBeCloseTo(drawn.tail.y - 30, 0)
+  expect(reaimed.rect).toEqual(drawn.rect)
+
+  // Standard selection deletion remains available without covering a resize handle.
+  await page.mouse.click(centre.x, centre.y)
+  await page.keyboard.press('Escape')
+  await page.keyboard.press('Delete')
   await expect
     .poll(async () => savedAnnotations(), { timeout: 10_000 })
     .toEqual([])
@@ -415,18 +428,13 @@ test('a callout resizes from its handles, resizing its text to match', async () 
     await page.mouse.up()
   }
 
-  await drag(at(200, 250), at(120, 150))
+  await drag(at(80, 250), at(120, 150))
   await expect
     .poll(async () => (await savedCallout())?.rect.width, { timeout: 10_000 })
     .toBeGreaterThan(0)
   const drawn = await savedCallout()
-  const centre = at(
-    drawn.rect.x + drawn.rect.width / 2,
-    drawn.rect.y + drawn.rect.height / 2,
-  )
 
-  // Write a note so there is text to re-size with the bubble.
-  await page.mouse.click(centre.x, centre.y)
+  // The new callout is already focused for typing.
   await page.keyboard.type('resize me')
   await page.keyboard.press('Enter')
   await expect
@@ -450,7 +458,7 @@ test('a callout resizes from its handles, resizing its text to match', async () 
   expect(enlarged.tail).toEqual(drawn.tail)
 })
 
-test('a callout is drawn empty, then clicked to write and rewrite its note', async () => {
+test('a valid callout drag starts centered typing immediately', async () => {
   await sendCapture({
     id: 'e2e-callout',
     dataUrl: ONE_PIXEL_PNG,
@@ -467,27 +475,19 @@ test('a callout is drawn empty, then clicked to write and rewrite its note', asy
   const box = await canvas.boundingBox()
   if (!box) throw new Error('canvas has no bounding box')
 
-  await page.mouse.move(box.x + 200, box.y + 250)
+  await page.mouse.move(box.x + 80, box.y + 250)
   await page.mouse.down()
   await page.mouse.move(box.x + 120, box.y + 150)
   await page.mouse.up()
 
-  // The drag commits the bubble on its own, with no field in the way.
+  // A valid drag commits the bubble and starts typing without another click.
   const note = page.locator('#callout-input')
-  await expect(note).toBeHidden()
+  await expect(note).toBeVisible()
+  await expect(note).toBeFocused()
+  await expect(note).toHaveCSS('text-align', 'center')
   await expect
     .poll(async () => savedAnnotations(), { timeout: 10_000 })
     .toMatchObject([{ kind: 'callout', text: '' }])
-
-  // Any tool can write the note, not just Callout.
-  await page.getByRole('button', { name: 'Box' }).click()
-  const drawn = await savedCallout()
-  const insideBubble = {
-    x: box.x + drawn.rect.x + drawn.rect.width / 2,
-    y: box.y + drawn.rect.y + drawn.rect.height / 2,
-  }
-  await page.mouse.click(insideBubble.x, insideBubble.y)
-  await expect(note).toBeVisible()
   await page.keyboard.type('check this')
   await page.keyboard.press('Enter')
   await expect(note).toBeHidden()
@@ -495,7 +495,13 @@ test('a callout is drawn empty, then clicked to write and rewrite its note', asy
     .poll(async () => savedAnnotations(), { timeout: 10_000 })
     .toMatchObject([{ kind: 'callout', text: 'check this' }])
 
-  // Clicking it again reopens the note for editing rather than drawing a box.
+  // Any tool can reopen the note for editing.
+  await page.getByRole('button', { name: 'Box' }).click()
+  const drawn = await savedCallout()
+  const insideBubble = {
+    x: box.x + drawn.rect.x + drawn.rect.width / 2,
+    y: box.y + drawn.rect.y + drawn.rect.height / 2,
+  }
   await page.mouse.click(insideBubble.x, insideBubble.y)
   await expect(note).toHaveValue('check this')
   await page.keyboard.type('rewritten')

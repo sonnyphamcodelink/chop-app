@@ -5,12 +5,10 @@ import {
   CALLOUT_FONT_HEIGHT_RATIO,
   CALLOUT_LINE_HEIGHT_RATIO,
   CALLOUT_MIN_FONT_SIZE,
-  CALLOUT_MIN_TAIL_LENGTH,
   CALLOUT_PADDING,
 } from '@shared/constants'
 import { addAnnotation, createDocument } from '@shared/document'
 import {
-  calloutBadgeRect,
   calloutFontSizeFor,
   calloutHeightForFontSize,
   calloutRectFor,
@@ -21,7 +19,6 @@ import {
   hideCalloutText,
   readableTextColor,
   tailBase,
-  tailTriangle,
   updateCalloutText,
   wrapText,
 } from '@shared/callout'
@@ -45,26 +42,27 @@ function wrappedHeight(rect: Rect, text: string, fontSize: number): number {
 }
 
 describe('calloutRectFor', () => {
-  const tip = { x: 200, y: 300 }
+  const tip = { x: 100, y: 200 }
 
-  it('hangs the bubble above the release point, tail base under the pointer', () => {
-    const rect = calloutRectFor(tip, { x: 260, y: 200 }, 160, 80)
-    const [left, right] = tailBase(rect)
-    expect((left.x + right.x) / 2).toBeCloseTo(260)
-    expect(rect.y + rect.height).toBe(200)
-    expect(rect).toMatchObject({ width: 160, height: 80 })
+  it('places the bubble beyond the release point and away from the fixed arrow tip', () => {
+    expect(calloutRectFor(tip, { x: 180, y: 120 }, 160, 80)).toEqual({
+      x: 180,
+      y: 40,
+      width: 160,
+      height: 80,
+    })
   })
 
-  it('lifts a bubble released level with its target clear of it, so the tail shows', () => {
-    const rect = calloutRectFor(tip, { x: 400, y: 300 }, 160, 80)
-    expect(rect.y + rect.height).toBe(tip.y - CALLOUT_MIN_TAIL_LENGTH)
-  })
-
-  it('keeps the bubble above the target even when released below it', () => {
-    const rect = calloutRectFor(tip, { x: 400, y: 500 }, 160, 80)
-    expect(rect.y + rect.height).toBeLessThan(tip.y)
-    // The pointer still decides which way along the capture the note sits.
-    expect(rect.x).toBeGreaterThan(tip.x)
+  it('mirrors the bubble placement for every drag direction', () => {
+    expect(calloutRectFor(tip, { x: 20, y: 120 }, 160, 80)).toEqual({
+      x: -140, y: 40, width: 160, height: 80,
+    })
+    expect(calloutRectFor(tip, { x: 20, y: 280 }, 160, 80)).toEqual({
+      x: -140, y: 280, width: 160, height: 80,
+    })
+    expect(calloutRectFor(tip, { x: 180, y: 280 }, 160, 80)).toEqual({
+      x: 180, y: 280, width: 160, height: 80,
+    })
   })
 })
 
@@ -97,39 +95,17 @@ describe('calloutHeightForFontSize', () => {
   })
 })
 
-describe('tailTriangle', () => {
-  const bottom = bubble.y + bubble.height
-
-  it('points its tip at the tail', () => {
-    const [, tip] = tailTriangle(bubble, { x: 132, y: 220 })
-    expect(tip).toEqual({ x: 132, y: 220 })
+describe('tailBase', () => {
+  it('attaches to the nearest box edge as the arrow moves around it', () => {
+    expect(tailBase(bubble, { x: 50, y: 140 })).toEqual({ x: 100, y: 140 })
+    expect(tailBase(bubble, { x: 350, y: 140 })).toEqual({ x: 300, y: 140 })
+    expect(tailBase(bubble, { x: 180, y: 40 })).toEqual({ x: 180, y: 100 })
+    expect(tailBase(bubble, { x: 180, y: 240 })).toEqual({ x: 180, y: 180 })
   })
 
-  it('sits flush on the bottom edge, left of centre', () => {
-    const [left, , right] = tailTriangle(bubble, { x: 200, y: 400 })
-    expect(left.y).toBe(bottom)
-    expect(right.y).toBe(bottom)
-    expect(left.x).toBeGreaterThanOrEqual(bubble.x)
-    expect(right.x).toBeLessThan(bubble.x + bubble.width / 2)
-  })
-
-  it('keeps the base put and only stretches, wherever the tip is', () => {
-    const [farLeft, , farRight] = tailTriangle(bubble, { x: -400, y: 400 })
-    const [nearLeft, , nearRight] = tailTriangle(bubble, { x: 600, y: 190 })
-    expect(farLeft).toEqual(nearLeft)
-    expect(farRight).toEqual(nearRight)
-  })
-
-  it('collapses onto the edge rather than pointing back through the bubble', () => {
-    const [, tip] = tailTriangle(bubble, { x: 220, y: 20 })
-    expect(tip).toEqual({ x: 220, y: bottom })
-  })
-
-  it('keeps the base inside a bubble narrower than the usual inset', () => {
-    const narrow = { x: 0, y: 0, width: 12, height: 20 }
-    const [left, , right] = tailTriangle(narrow, { x: 6, y: 60 })
-    expect(left.x).toBeGreaterThanOrEqual(narrow.x)
-    expect(right.x).toBeLessThanOrEqual(narrow.x + narrow.width)
+  it('uses the nearest corner when the arrow is diagonally outside the box', () => {
+    expect(tailBase(bubble, { x: 40, y: 240 })).toEqual({ x: 100, y: 180 })
+    expect(tailBase(bubble, { x: 360, y: 40 })).toEqual({ x: 300, y: 100 })
   })
 })
 
@@ -246,22 +222,6 @@ describe('updateCalloutText', () => {
   it('does not mutate the callout it was given', () => {
     updateCalloutText(callout, 'something else entirely', measurerFor)
     expect(callout.text).toBe('before')
-  })
-})
-
-describe('calloutBadgeRect', () => {
-  it('straddles the top-right corner of the bubble', () => {
-    const badge = calloutBadgeRect(bubble, 1)
-    expect(badge.x + badge.width / 2).toBe(bubble.x + bubble.width)
-    expect(badge.y + badge.height / 2).toBe(bubble.y)
-  })
-
-  it('covers more image pixels as the image is zoomed out, staying constant on screen', () => {
-    expect(calloutBadgeRect(bubble, 0.5).width).toBe(calloutBadgeRect(bubble, 1).width * 2)
-  })
-
-  it('treats a zero scale as 1:1 rather than dividing by it', () => {
-    expect(calloutBadgeRect(bubble, 0).width).toBe(calloutBadgeRect(bubble, 1).width)
   })
 })
 
