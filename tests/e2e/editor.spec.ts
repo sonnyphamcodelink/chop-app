@@ -316,6 +316,45 @@ async function savedBox(): Promise<{
   return found as never
 }
 
+test('quick styles update selected objects and preserve undo', async () => {
+  await sendCapture({ id: 'e2e-styles', dataUrl: ONE_PIXEL_PNG, width: 400, height: 300, createdAt: new Date().toISOString() })
+  const page = await editorPage()
+  const sidebar = page.getByRole('complementary', { name: 'Quick Styles' })
+  await expect(sidebar).toBeVisible()
+  await page.getByRole('button', { name: 'Callout', exact: true }).click()
+  await sidebar.getByRole('button', { name: 'Green thick style' }).click()
+  const box = await page.locator('#canvas').boundingBox()
+  if (!box) throw new Error('missing canvas')
+  await page.mouse.move(box.x + 80, box.y + 250)
+  await page.mouse.down()
+  await page.mouse.move(box.x + 120, box.y + 150)
+  await page.mouse.up()
+  await page.keyboard.type('Styled note')
+  await page.keyboard.press('Enter')
+  await expect.poll(savedAnnotations).toMatchObject([{ color: '#4fb264', text: 'Styled note' }])
+  await sidebar.getByRole('button', { name: 'Blue medium style' }).click()
+  await expect.poll(savedAnnotations).toMatchObject([{ color: '#4a8ff0', strokeWidth: 6, text: 'Styled note' }])
+  await page.getByRole('button', { name: 'Undo', exact: true }).click()
+  await expect.poll(savedAnnotations).toMatchObject([{ color: '#4fb264', strokeWidth: 10 }])
+  await expect(page.locator('#toolbar .tb-colors, #toolbar .tb-weights')).toHaveCount(0)
+  // Re-select after Undo, then change the selected callout through the popup.
+  await page.mouse.click(box.x + 180, box.y + 110)
+  await page.keyboard.press('Escape')
+  await sidebar.getByRole('button', { name: 'Style color', exact: true }).click()
+  await expect(page.locator('#color-popover')).toBeVisible()
+  await page.getByRole('textbox', { name: 'Hex color' }).fill('#e80808')
+  await page.getByRole('textbox', { name: 'Hex color' }).press('Tab')
+  await expect.poll(savedAnnotations).toMatchObject([{ color: '#e80808' }])
+  await page.screenshot({ path: test.info().outputPath('color-picker.png') })
+  await page.keyboard.press('Escape')
+  await sidebar.getByRole('slider', { name: 'Style line width', exact: true }).fill('2.2')
+  await expect.poll(savedAnnotations).toMatchObject([{ strokeWidth: 2.2 }])
+  await sidebar.getByRole('slider', { name: 'Style opacity', exact: true }).fill('50')
+  await expect.poll(savedAnnotations).toMatchObject([{ color: '#e8080880' }])
+  await page.getByRole('button', { name: 'Crop', exact: true }).click()
+  await expect(sidebar.getByText('This tool has no style properties.')).toBeVisible()
+})
+
 test('a callout box and arrow tip can move independently', async () => {
   await sendCapture({
     id: 'e2e-callout-move',

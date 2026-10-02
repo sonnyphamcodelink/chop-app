@@ -31,7 +31,8 @@ import {
   undoState,
 } from '@shared/editor-state'
 import type { CaptureResult, ShortcutInfo } from '@shared/ipc'
-import type { ToolId } from '@shared/tools'
+import type { ToolId, ToolStyle } from '@shared/tools'
+import { createQuickStyles } from './quick-styles'
 import type { BackgroundUpdateState } from '@shared/update'
 import { createCalloutInput, type CalloutInputGeometry } from './callout-input'
 import { browserCanvasFactory, createCanvasView, textMeasurer } from './canvas-view'
@@ -115,8 +116,7 @@ const store = {
 
 function draw(): void {
   toolbar.setActive(state.tool)
-  toolbar.setColor(state.style.color)
-  toolbar.setStrokeWidth(state.style.strokeWidth)
+  quickStyles.update(state)
   if (loaded) view.render(state)
 }
 
@@ -186,31 +186,8 @@ function deleteSelectedAnnotation(): void {
   )
 }
 
-/** Recolors the selected annotation, if it has a color, as one undoable step. */
-function applyColor(color: string): void {
-  const styled = setStyle(state, { color })
-  const id = state.selectedAnnotationId
-  const target = id
-    ? currentDocument(state).annotations.find((a) => a.id === id)
-    : null
-  if (!target || target.kind === 'blur' || target.color === color) {
-    store.set(styled)
-    return
-  }
-  store.set(
-    commitDocument(
-      styled,
-      updateAnnotation(currentDocument(styled), target.id, (a) =>
-        a.kind === 'blur' ? a : { ...a, color },
-      ),
-    ),
-  )
-}
-
 const toolbar = createToolbar(toolbarRoot, {
   onTool: applyTool,
-  onColor: applyColor,
-  onStrokeWidth: (strokeWidth) => store.set(setStyle(state, { strokeWidth })),
   onUndo: () => store.set(undoState(state)),
   onRedo: () => store.set(redoState(state)),
   onCopy: () => copyToClipboard(),
@@ -230,6 +207,20 @@ function stagePoint(imagePoint: Point): Point {
 }
 
 const calloutInput = createCalloutInput(calloutElement)
+
+const quickStyles = createQuickStyles(document.querySelector<HTMLElement>('#quick-styles')!, (patch) => {
+  calloutInput.commit()
+  if (textInput.isOpen) textInput.commit()
+  const styled = setStyle(state, patch)
+  const target = currentDocument(state).annotations.find(a => a.id === state.selectedAnnotationId)
+  if (!target || target.kind === 'blur') { store.set(styled); return }
+  const changes: Partial<ToolStyle> = {
+    ...(patch.color !== undefined ? { color: patch.color } : {}),
+    ...(patch.strokeWidth !== undefined && ['box', 'arrow', 'callout'].includes(target.kind) ? { strokeWidth: patch.strokeWidth } : {}),
+    ...(patch.fontSize !== undefined && target.kind === 'text' ? { fontSize: patch.fontSize } : {}),
+  }
+  store.set(commitDocument(styled, updateAnnotation(currentDocument(styled), target.id, a => ({ ...a, ...changes }))))
+})
 
 zoomOutButton.addEventListener('click', () => stepZoom(-1))
 zoomInButton.addEventListener('click', () => stepZoom(1))
@@ -282,7 +273,7 @@ function documentWithNote(origin: CaptureDocument, id: string, text: string): Ca
 function startCalloutEdit(callout: CalloutAnnotation): void {
   const origin = currentDocument(state)
   calloutEditOrigin = origin
-  store.set(setEditingCallout(state, callout.id))
+  store.set(setEditingCallout(setSelectedAnnotation(state, callout.id), callout.id))
   calloutInput.open({
     geometry: calloutGeometry(callout),
     initialText: callout.text,
@@ -571,6 +562,7 @@ const SHORTCUT_TOOLS: Readonly<Record<string, ToolId>> = {
 }
 
 document.addEventListener('keydown', (event) => {
+  if (event.target instanceof HTMLElement && event.target.closest('#quick-styles input')) return
   const meta = event.metaKey || event.ctrlKey
 
   if (isCropping() && (event.key === 'Enter' || event.key === 'Escape')) {

@@ -1,4 +1,3 @@
-import { STROKE_WIDTHS } from '@shared/constants'
 import type { ToolId } from '@shared/tools'
 
 const SVG_NS = 'http://www.w3.org/2000/svg'
@@ -79,32 +78,8 @@ const TOOLS: readonly { readonly id: ToolId; readonly label: string; readonly ke
   { id: 'crop', label: 'Crop', key: 'C' },
 ]
 
-const COLORS: readonly { readonly label: string; readonly hex: string }[] = [
-  { label: 'Red', hex: '#e5484d' },
-  { label: 'Orange', hex: '#f0954d' },
-  { label: 'Yellow', hex: '#f0c94d' },
-  { label: 'Green', hex: '#4fb264' },
-  { label: 'Blue', hex: '#4a8ff0' },
-  { label: 'Purple', hex: '#9a6ff0' },
-  { label: 'Black', hex: '#1c1c1e' },
-  { label: 'White', hex: '#ffffff' },
-]
-
-/** `dot` is the marker drawn in the button, not the stroke it selects. */
-const WEIGHTS: readonly {
-  readonly label: string
-  readonly width: number
-  readonly dot: number
-}[] = [
-  { label: 'Thin', width: STROKE_WIDTHS.thin, dot: 3 },
-  { label: 'Medium', width: STROKE_WIDTHS.medium, dot: 6 },
-  { label: 'Thick', width: STROKE_WIDTHS.thick, dot: 9 },
-]
-
 export type ToolbarHandlers = {
   onTool(tool: ToolId): void
-  onColor(color: string): void
-  onStrokeWidth(width: number): void
   onUndo(): void
   onRedo(): void
   onCopy(): void
@@ -112,8 +87,6 @@ export type ToolbarHandlers = {
 
 export type Toolbar = {
   setActive(tool: ToolId): void
-  setColor(color: string): void
-  setStrokeWidth(width: number): void
 }
 
 function createIcon(parts: readonly IconPart[]): SVGSVGElement {
@@ -153,8 +126,6 @@ function markActive<K>(buttons: ReadonlyMap<K, HTMLButtonElement>, selected: K |
 
 export function createToolbar(root: HTMLElement, handlers: ToolbarHandlers): Toolbar {
   const toolButtons = new Map<ToolId, HTMLButtonElement>()
-  const swatchButtons = new Map<string, HTMLButtonElement>()
-  const weightButtons = new Map<number, HTMLButtonElement>()
 
   const tools = addGroup(root, 'tb-tools')
   for (const tool of TOOLS) {
@@ -167,44 +138,6 @@ export function createToolbar(root: HTMLElement, handlers: ToolbarHandlers): Too
     button.addEventListener('click', () => handlers.onTool(tool.id))
     toolButtons.set(tool.id, button)
     tools.append(button)
-  }
-
-  addDivider(root)
-
-  const colors = addGroup(root, 'tb-colors')
-  for (const color of COLORS) {
-    const swatch = document.createElement('button')
-    swatch.className = 'tb-swatch'
-    swatch.type = 'button'
-    swatch.style.background = color.hex
-    swatch.title = color.label
-    swatch.setAttribute('aria-label', color.label)
-    // White would otherwise disappear into the panel behind it.
-    swatch.classList.toggle('tb-outlined', color.hex.toLowerCase() === '#ffffff')
-    swatch.addEventListener('click', () => handlers.onColor(color.hex))
-    swatchButtons.set(color.hex, swatch)
-    colors.append(swatch)
-  }
-
-  addDivider(root)
-
-  const weights = addGroup(root, 'tb-weights')
-  for (const weight of WEIGHTS) {
-    const button = document.createElement('button')
-    button.className = 'tb-weight'
-    button.type = 'button'
-    button.title = `${weight.label} stroke`
-    button.setAttribute('aria-label', `${weight.label} stroke`)
-
-    const dot = document.createElement('div')
-    dot.className = 'tb-dot'
-    dot.style.width = `${weight.dot}px`
-    dot.style.height = `${weight.dot}px`
-    button.append(dot)
-
-    button.addEventListener('click', () => handlers.onStrokeWidth(weight.width))
-    weightButtons.set(weight.width, button)
-    weights.append(button)
   }
 
   addDivider(root)
@@ -230,15 +163,5 @@ export function createToolbar(root: HTMLElement, handlers: ToolbarHandlers): Too
       markActive(toolButtons, tool)
     },
 
-    // Documents can carry a colour or width that is not offered here, in which
-    // case nothing is marked rather than the wrong button.
-    setColor(color: string): void {
-      const selected = COLORS.find((c) => c.hex.toLowerCase() === color.toLowerCase())
-      markActive(swatchButtons, selected?.hex ?? null)
-    },
-
-    setStrokeWidth(width: number): void {
-      markActive(weightButtons, weightButtons.has(width) ? width : null)
-    },
   }
 }

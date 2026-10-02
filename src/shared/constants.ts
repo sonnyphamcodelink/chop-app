@@ -23,13 +23,13 @@ export const MIN_WINDOW_DIMENSION = 40
 export const MIN_SELECTION_DIMENSION = 4
 
 export const STROKE_WIDTH_MIN = 1
-export const STROKE_WIDTH_MAX = 12
+export const STROKE_WIDTH_MAX = 30
 
 /** The three weights the toolbar offers, in image pixels. */
 export const STROKE_WIDTHS = { thin: 3, medium: 6, thick: 10 } as const
 
-/** Default matches the toolbar's heaviest weight. */
-export const DEFAULT_STROKE_WIDTH = STROKE_WIDTHS.thick
+/** New annotations start with a 6 pt stroke. */
+export const DEFAULT_STROKE_WIDTH = STROKE_WIDTHS.medium
 export const DEFAULT_FONT_SIZE = 40
 
 /** Callout bubble corner rounding, in image pixels. */

@@ -193,7 +193,7 @@ export function hideCalloutText(doc: CaptureDocument, id: string): CaptureDocume
 }
 
 const SHORTHAND_HEX = /^#([0-9a-f])([0-9a-f])([0-9a-f])$/i
-const FULL_HEX = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i
+const FULL_HEX = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})(?:[0-9a-f]{2})?$/i
 
 function parseHex(color: string): readonly [number, number, number] | null {
   const shorthand = SHORTHAND_HEX.exec(color)

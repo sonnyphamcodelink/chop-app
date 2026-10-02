@@ -43,7 +43,7 @@ describe('constants', () => {
     expect([...widths].sort((a, b) => a - b)).toEqual(widths)
   })
 
-  it('defaults the stroke width to the middle offered weight', () => {
+  it('defaults the stroke width to the medium offered weight', () => {
     expect(DEFAULT_STROKE_WIDTH).toBe(STROKE_WIDTHS.medium)
   })
 
