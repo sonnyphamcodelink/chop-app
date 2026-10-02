@@ -77,6 +77,21 @@ export function drawResizeHandle(
   ctx.stroke()
 }
 
+/**
+ * The room a stage offers a fitted canvas: its box inside the padding. Measured
+ * from the outer box, so it is the same whether or not scrollbars are showing —
+ * a fit that shrank for its own scrollbars would change size on every redraw.
+ */
+function fitViewport(stage: HTMLElement): { width: number; height: number } {
+  const style = getComputedStyle(stage)
+  const paddingX = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight)
+  const paddingY = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom)
+  return {
+    width: Math.max(0, stage.offsetWidth - (paddingX || 0)),
+    height: Math.max(0, stage.offsetHeight - (paddingY || 0)),
+  }
+}
+
 export function createCanvasView(canvas: HTMLCanvasElement): CanvasView {
   let image: HTMLImageElement | null = null
   /** CSS pixels per image pixel (on-screen size). Hit-testing uses this. */
@@ -262,11 +277,10 @@ export function createCanvasView(canvas: HTMLCanvasElement): CanvasView {
         ? { ...baseDoc, cropRect: null }
         : documentWithDraft(baseDoc, state.draft, state.style)
       const size = outputSize(doc)
-      const parent = canvas.parentElement
+      const viewport = canvas.parentElement ? fitViewport(canvas.parentElement) : size
       const fittedScale = fitScale(
         size.width, size.height,
-        parent?.clientWidth ?? size.width,
-        parent?.clientHeight ?? size.height,
+        viewport.width, viewport.height,
         doc.scaleFactor,
       )
       currentScale = fittedScale * currentZoom

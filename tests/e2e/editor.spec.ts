@@ -1,4 +1,10 @@
-import { _electron as electron, type ElectronApplication, expect, test } from '@playwright/test'
+import {
+  _electron as electron,
+  type ElectronApplication,
+  expect,
+  type Page,
+  test,
+} from '@playwright/test'
 import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -19,12 +25,32 @@ type Capture = {
 
 /** Drives the editor the way main does, bypassing real screen capture. */
 async function sendCapture(capture: Capture): Promise<void> {
+  // The seam is installed once the app is ready, which can trail the launch.
+  await expect
+    .poll(() =>
+      app.evaluate(
+        () => typeof (globalThis as { __chopSendCapture?: unknown }).__chopSendCapture,
+      ),
+    )
+    .toBe('function')
   await app.evaluate((_electron, payload) => {
     const send = (globalThis as { __chopSendCapture?: (c: Capture) => void })
       .__chopSendCapture
     if (!send) throw new Error('__chopSendCapture seam is missing')
     send(payload)
   }, capture)
+}
+
+/**
+ * The editor's page. The capture overlays are windows too and can open first,
+ * so `firstWindow()` is not reliably the editor.
+ */
+async function editorPage(): Promise<Page> {
+  const isEditor = (page: Page): boolean => page.url().includes('/editor/')
+  await expect.poll(() => app.windows().some(isEditor)).toBe(true)
+  const page = app.windows().find(isEditor)
+  if (!page) throw new Error('editor window is missing')
+  return page
 }
 
 test.beforeEach(async () => {
@@ -56,7 +82,7 @@ test('an incoming capture opens the editor and is auto-saved', async () => {
     createdAt: new Date().toISOString(),
   })
 
-  const page = await app.firstWindow()
+  const page = await editorPage()
   await expect(page.locator('#canvas')).toBeVisible()
   await expect(page.locator('#empty')).toBeHidden()
 
@@ -80,7 +106,7 @@ test('zoom controls and Command+wheel resize the fitted canvas', async () => {
     createdAt: new Date().toISOString(),
   })
 
-  const page = await app.firstWindow()
+  const page = await editorPage()
   const canvas = page.locator('#canvas')
   const zoomLevel = page.locator('#zoom-level')
   await expect(canvas).toBeVisible()
@@ -108,6 +134,41 @@ test('zoom controls and Command+wheel resize the fitted canvas', async () => {
   await expect(zoomLevel).toHaveText('100%')
 })
 
+test('a capture larger than the stage keeps one fitted size while it redraws', async () => {
+  // Fitted to 1100 CSS px wide, this capture is 559 px tall: with a scrollbar
+  // on each axis it used to fit differently on every redraw and flicker.
+  await sendCapture({
+    id: 'e2e-fit',
+    dataUrl: ONE_PIXEL_PNG,
+    width: 2200,
+    height: 1118,
+    createdAt: new Date().toISOString(),
+  })
+
+  const page = await editorPage()
+  const canvas = page.locator('#canvas')
+  await expect(canvas).toBeVisible()
+  // Scrollbars that take up layout space, as macOS shows with a mouse attached.
+  await page.addStyleTag({ content: '::-webkit-scrollbar { width: 15px; height: 15px; }' })
+
+  const sizes = new Set<string>()
+  for (let step = 0; step < 12; step++) {
+    // Every pointer move over the canvas redraws it.
+    await page.mouse.move(400 + step * 5, 300)
+    const box = await canvas.boundingBox()
+    if (!box) throw new Error('canvas has no bounding box')
+    sizes.add(`${box.width}x${box.height}`)
+  }
+
+  expect([...sizes]).toHaveLength(1)
+  // At 100% the whole capture is in view, so the stage has nothing to scroll.
+  const overflow = await page.locator('#stage').evaluate((stage) => ({
+    x: stage.scrollWidth - stage.clientWidth,
+    y: stage.scrollHeight - stage.clientHeight,
+  }))
+  expect(overflow).toEqual({ x: 0, y: 0 })
+})
+
 test('drawing a box is undoable and lands in the saved document', async () => {
   await sendCapture({
     id: 'e2e-2',
@@ -117,7 +178,7 @@ test('drawing a box is undoable and lands in the saved document', async () => {
     createdAt: new Date().toISOString(),
   })
 
-  const page = await app.firstWindow()
+  const page = await editorPage()
   await expect(page.locator('#empty')).toBeHidden()
   await page.getByRole('button', { name: 'Box' }).click()
 
@@ -150,7 +211,7 @@ test('a placed box can be moved and resized in any tool mode', async () => {
     createdAt: new Date().toISOString(),
   })
 
-  const page = await app.firstWindow()
+  const page = await editorPage()
   await expect(page.locator('#empty')).toBeHidden()
   await page.getByRole('button', { name: 'Box' }).click()
 
@@ -206,7 +267,7 @@ test('a selected box is deleted by the Delete key', async () => {
     createdAt: new Date().toISOString(),
   })
 
-  const page = await app.firstWindow()
+  const page = await editorPage()
   await expect(page.locator('#empty')).toBeHidden()
   await page.getByRole('button', { name: 'Box' }).click()
 
@@ -264,7 +325,7 @@ test('a callout can be dragged around the capture and deleted from its badge', a
     createdAt: new Date().toISOString(),
   })
 
-  const page = await app.firstWindow()
+  const page = await editorPage()
   await expect(page.locator('#empty')).toBeHidden()
   await page.getByRole('button', { name: 'Callout' }).click()
 
@@ -336,7 +397,7 @@ test('a callout resizes from its handles, resizing its text to match', async () 
     createdAt: new Date().toISOString(),
   })
 
-  const page = await app.firstWindow()
+  const page = await editorPage()
   await expect(page.locator('#empty')).toBeHidden()
   await page.getByRole('button', { name: 'Callout' }).click()
 
@@ -398,7 +459,7 @@ test('a callout is drawn empty, then clicked to write and rewrite its note', asy
     createdAt: new Date().toISOString(),
   })
 
-  const page = await app.firstWindow()
+  const page = await editorPage()
   await expect(page.locator('#empty')).toBeHidden()
   await page.getByRole('button', { name: 'Callout' }).click()
 
@@ -498,7 +559,7 @@ test('Enter saves a crop and Escape abandons it', async () => {
     createdAt: new Date().toISOString(),
   })
 
-  const page = await app.firstWindow()
+  const page = await editorPage()
   await expect(page.locator('#empty')).toBeHidden()
 
   const canvas = page.locator('#canvas')
@@ -540,7 +601,7 @@ test('dragging an edge in a drawing tool trims the capture on mouse release', as
     createdAt: new Date().toISOString(),
   })
 
-  const page = await app.firstWindow()
+  const page = await editorPage()
   await expect(page.locator('#empty')).toBeHidden()
 
   // Box is the starting tool: the trim handles have to work without leaving it.
@@ -576,7 +637,7 @@ test('the tray keeps the app alive after the editor closes', async () => {
     height: 1,
     createdAt: new Date().toISOString(),
   })
-  await app.firstWindow()
+  await editorPage()
 
   await app.evaluate(({ BrowserWindow }) => {
     for (const window of BrowserWindow.getAllWindows()) window.destroy()
@@ -592,7 +653,7 @@ test('the tray keeps the app alive after the editor closes', async () => {
 test('closing the editor keeps it available from the Dock on macOS', async () => {
   test.skip(process.platform !== 'darwin')
 
-  await app.firstWindow()
+  await editorPage()
   await expect
     .poll(() =>
       app.evaluate(({ BrowserWindow }) =>
