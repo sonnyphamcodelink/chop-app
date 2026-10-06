@@ -1,5 +1,6 @@
 import { app } from 'electron'
 import { showAboutChop } from './about'
+import { ensureDockIcon } from './dock'
 import { runCaptureFlow } from './capture/capture-flow'
 import { warmOverlays } from './capture/overlay-manager'
 import { getEditorWindow, sendCapture, showEditorWindow } from './editor-window'
@@ -85,7 +86,9 @@ if (!app.requestSingleInstanceLock()) {
 
     // Chop is a regular Dock app as well as a menu-bar app. Keep its Dock icon
     // available even while all of its windows are hidden.
-    void app.dock?.show()
+    ensureDockIcon()
+    // Warmed overlay windows finish loading after this, so assert it again.
+    void warmOverlays().then(ensureDockIcon)
 
     // A dev build always looks stale against the newest release, so it never asks.
     if (app.isPackaged) {

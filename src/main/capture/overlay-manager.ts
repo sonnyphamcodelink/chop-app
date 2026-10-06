@@ -4,6 +4,7 @@ import type { DisplayInfo } from '@shared/coords'
 import { CHANNELS, type OverlayInit, type OverlaySelection } from '@shared/ipc'
 import type { WindowRect } from '@shared/window-rect'
 import type { DisplayCapture } from './capture-service'
+import { ensureDockIcon } from '../dock'
 import { windowsForDisplay } from './overlay-layout'
 
 export { windowsForDisplay }
@@ -35,7 +36,12 @@ function createOverlayWindow(display: DisplayInfo): BrowserWindow {
   // Keep the overlay above app windows, but below macOS privacy prompts. Using
   // 'screen-saver' can trap the first-run Screen Recording prompt behind Chop.
   overlay.setAlwaysOnTop(true, 'floating')
-  overlay.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+  // skipTransformProcessType keeps Chop a regular app: without it macOS turns
+  // the process into a UI element and drops the Dock icon.
+  overlay.setVisibleOnAllWorkspaces(true, {
+    visibleOnFullScreen: true,
+    skipTransformProcessType: true,
+  })
   return overlay
 }
 
@@ -135,6 +141,7 @@ export async function showOverlays(
     for (const { window } of overlays) {
       if (!window.isDestroyed()) window.hide()
     }
+    ensureDockIcon()
   }
 
   try {

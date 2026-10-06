@@ -1,5 +1,6 @@
 import { app, BrowserWindow } from 'electron'
 import { join } from 'node:path'
+import { ensureDockIcon } from './dock'
 import { CHANNELS, type CaptureResult } from '@shared/ipc'
 
 let editor: BrowserWindow | null = null
@@ -38,6 +39,7 @@ export function getEditorWindow(): BrowserWindow {
     if (process.platform === 'darwin' && !quitting) {
       event.preventDefault()
       editor?.hide()
+      ensureDockIcon()
     }
   })
   editor.on('closed', () => {

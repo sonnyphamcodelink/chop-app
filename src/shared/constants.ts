@@ -28,8 +28,8 @@ export const STROKE_WIDTH_MAX = 30
 /** The three weights the toolbar offers, in image pixels. */
 export const STROKE_WIDTHS = { thin: 3, medium: 6, thick: 10 } as const
 
-/** New annotations start with a 6 pt stroke. */
-export const DEFAULT_STROKE_WIDTH = STROKE_WIDTHS.medium
+/** New annotations start with a 10 pt stroke. */
+export const DEFAULT_STROKE_WIDTH = STROKE_WIDTHS.thick
 export const DEFAULT_FONT_SIZE = 40
 
 /** Callout bubble corner rounding, in image pixels. */

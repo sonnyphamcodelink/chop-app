@@ -5,6 +5,9 @@ import type { ToolStyle } from '@shared/tools'
 import { createColorPicker } from './color-picker'
 import { STROKE_WIDTH_MIN, STROKE_WIDTH_MAX } from '@shared/constants'
 
+/** Box preset rows, top to bottom. */
+const BOX_PRESET_WIDTHS = [6, 10, 15] as const
+
 const COLORS = [
   ['Red', '#e5484d'], ['Green', '#4fb264'], ['Blue', '#4a8ff0'], ['Yellow', '#f0c94d'],
 ] as const
@@ -51,13 +54,13 @@ export function createQuickStyles(root: HTMLElement, apply: (patch: Partial<Tool
       if (previousKind !== kind) {
         previousKind = kind
         grid.replaceChildren()
-        for (const weight of (kind === 'highlight' ? [3] : [3, 6, 10])) for (const [name, hex] of COLORS) {
+        for (const weight of (kind === 'highlight' ? [3] : kind === 'box' ? BOX_PRESET_WIDTHS : [3, 6, 10])) for (const [name, hex] of COLORS) {
           const button = document.createElement('button')
           button.type = 'button'
           button.className = 'qs-preset'
           button.dataset.color = hex
           button.dataset.weight = String(weight)
-          button.setAttribute('aria-label', `${name} ${weight === 3 ? 'thin' : weight === 6 ? 'medium' : 'thick'} style`)
+          button.setAttribute('aria-label', kind === 'box' ? `${name} ${weight}px style` : `${name} ${weight === 3 ? 'thin' : weight === 6 ? 'medium' : 'thick'} style`)
           button.title = button.getAttribute('aria-label')!
           const stroke = weight / 3
           const mark = kind === 'callout'
