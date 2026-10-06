@@ -454,6 +454,48 @@ test('quick styles update selected objects and preserve undo', async () => {
   await expect(sidebar.getByText('This tool has no style properties.')).toBeVisible()
 })
 
+test('steps number themselves, can be relabelled, and follow the chosen type', async () => {
+  await sendCapture({ id: 'e2e-steps', dataUrl: ONE_PIXEL_PNG, width: 400, height: 300, createdAt: new Date().toISOString() })
+  const page = await editorPage()
+  const sidebar = page.getByRole('complementary', { name: 'Quick Styles' })
+  await page.getByRole('button', { name: 'Step', exact: true }).click()
+  const box = await page.locator('#canvas').boundingBox()
+  if (!box) throw new Error('missing canvas')
+  const steps = async () =>
+    ((await savedAnnotations()) as readonly { kind: string }[] | undefined)?.filter((a) => a.kind === 'step')
+
+  // Each click drops the next number.
+  for (const x of [60, 140, 220]) await page.mouse.click(box.x + x, box.y + 80)
+  await expect.poll(steps).toMatchObject([{ text: '1' }, { text: '2' }, { text: '3' }])
+
+  // Clicking a step opens its label for editing.
+  await page.mouse.click(box.x + 140, box.y + 80)
+  await expect(page.locator('#callout-input')).toBeFocused()
+  await page.keyboard.type('1')
+  await page.keyboard.press('Enter')
+  await expect.poll(steps).toMatchObject([{ text: '1' }, { text: '1' }, { text: '3' }])
+
+  // Numbering carries on past the highest label in place.
+  await page.mouse.click(box.x + 300, box.y + 80)
+  await expect.poll(async () => (await steps())?.at(-1)).toMatchObject({ text: '4' })
+
+  // A preset switches shape and type for new steps, starting that type afresh.
+  await sidebar.getByRole('button', { name: 'Green pin A… B… C… style' }).click()
+  await page.mouse.click(box.x + 60, box.y + 200)
+  await page.mouse.click(box.x + 160, box.y + 200)
+  await expect.poll(async () => (await steps())?.slice(-2)).toMatchObject([
+    { text: 'A', shape: 'pin', color: '#4fb264', sequence: 'upper' },
+    { text: 'B', shape: 'pin', color: '#4fb264', sequence: 'upper' },
+  ])
+
+  // Changing the type of a selected step keeps its place in the sequence.
+  await page.mouse.click(box.x + 160, box.y + 200)
+  await page.keyboard.press('Escape')
+  await sidebar.getByRole('combobox', { name: 'Step type' }).selectOption('lower')
+  await expect.poll(async () => (await steps())?.at(-1)).toMatchObject({ text: 'b', sequence: 'lower' })
+  await page.screenshot({ path: test.info().outputPath('steps.png') })
+})
+
 test('a callout box and arrow tip can move independently', async () => {
   await sendCapture({
     id: 'e2e-callout-move',

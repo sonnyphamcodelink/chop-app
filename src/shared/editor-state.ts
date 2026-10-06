@@ -8,7 +8,7 @@ import {
   undo,
 } from './history'
 import { rectsEqual, type Rect } from './geometry'
-import { type Draft, defaultStyle, type ToolId, type ToolStyle } from './tools'
+import { type Draft, defaultStrokeWidthFor, defaultStyle, type ToolId, type ToolStyle } from './tools'
 
 export type EditorState = {
   readonly history: History<CaptureDocument>
@@ -21,7 +21,7 @@ export type EditorState = {
   readonly hoveredAnnotationId: string | null
   /** Annotation chosen by clicking, kept after the pointer moves away. */
   readonly selectedAnnotationId: string | null
-  /** Callout whose note is being typed, whose text the overlay draws instead. */
+  /** Callout or step whose text is being typed, which the overlay draws instead. */
   readonly editingCalloutId: string | null
 }
 
@@ -66,7 +66,12 @@ export function setTool(state: EditorState, tool: ToolId): EditorState {
       cropSession: reframeSession(currentDocument(state)),
     }
   }
-  return { ...state, tool, draft: null, cropSession: null, selectedAnnotationId: null }
+  // A width the user never changed follows the tool; a chosen one carries over.
+  const untouched = state.style.strokeWidth === defaultStrokeWidthFor(state.tool)
+  const style = untouched
+    ? { ...state.style, strokeWidth: defaultStrokeWidthFor(tool) }
+    : state.style
+  return { ...state, tool, style, draft: null, cropSession: null, selectedAnnotationId: null }
 }
 
 function reframeSession(doc: CaptureDocument): CropSession {

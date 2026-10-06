@@ -2,8 +2,10 @@ import { calloutTextWidth, readableTextColor, withCalloutText } from '@shared/ca
 import { AUTOSAVE_DEBOUNCE_MS, CALLOUT_LINE_HEIGHT_RATIO } from '@shared/constants'
 import { debounce } from '@shared/debounce'
 import type {
+  Annotation,
   CalloutAnnotation,
   CaptureDocument,
+  StepAnnotation,
   TextAnnotation,
 } from '@shared/document'
 import {
@@ -31,11 +33,18 @@ import {
   undoState,
 } from '@shared/editor-state'
 import type { CaptureResult, ShortcutInfo } from '@shared/ipc'
+import { stepFont } from '@shared/render'
+import { convertStepSequence, fitStepFontSize, stepBodyRect, withStepText } from '@shared/step'
 import type { ToolId, ToolStyle } from '@shared/tools'
 import { createQuickStyles } from './quick-styles'
 import type { BackgroundUpdateState } from '@shared/update'
 import { createCalloutInput, type CalloutInputGeometry } from './callout-input'
-import { browserCanvasFactory, createCanvasView, textMeasurer } from './canvas-view'
+import {
+  browserCanvasFactory,
+  createCanvasView,
+  stepTextMeasurer,
+  textMeasurer,
+} from './canvas-view'
 import { createFilmstrip } from './filmstrip'
 import type { FilmstripEntry } from './filmstrip'
 import { attachInteractions } from './interactions'
@@ -214,13 +223,27 @@ const quickStyles = createQuickStyles(document.querySelector<HTMLElement>('#quic
   const styled = setStyle(state, patch)
   const target = currentDocument(state).annotations.find(a => a.id === state.selectedAnnotationId)
   if (!target || target.kind === 'blur') { store.set(styled); return }
+  store.set(commitDocument(styled, updateAnnotation(currentDocument(styled), target.id, a => styledAnnotation(a, patch))))
+})
+
+/** The parts of a style change that apply to an annotation of this kind. */
+function styledAnnotation(annotation: Annotation, patch: Partial<ToolStyle>): Annotation {
+  if (annotation.kind === 'step') {
+    const restyled: StepAnnotation = {
+      ...annotation,
+      ...(patch.color !== undefined ? { color: patch.color } : {}),
+      ...(patch.stepShape !== undefined ? { shape: patch.stepShape } : {}),
+      ...(patch.stepSize !== undefined ? { size: patch.stepSize } : {}),
+    }
+    return patch.stepSequence !== undefined ? convertStepSequence(restyled, patch.stepSequence) : restyled
+  }
   const changes: Partial<ToolStyle> = {
     ...(patch.color !== undefined ? { color: patch.color } : {}),
-    ...(patch.strokeWidth !== undefined && ['box', 'arrow', 'callout'].includes(target.kind) ? { strokeWidth: patch.strokeWidth } : {}),
-    ...(patch.fontSize !== undefined && target.kind === 'text' ? { fontSize: patch.fontSize } : {}),
+    ...(patch.strokeWidth !== undefined && ['box', 'arrow', 'callout'].includes(annotation.kind) ? { strokeWidth: patch.strokeWidth } : {}),
+    ...(patch.fontSize !== undefined && annotation.kind === 'text' ? { fontSize: patch.fontSize } : {}),
   }
-  store.set(commitDocument(styled, updateAnnotation(currentDocument(styled), target.id, a => ({ ...a, ...changes }))))
-})
+  return { ...annotation, ...changes } as Annotation
+}
 
 zoomOutButton.addEventListener('click', () => stepZoom(-1))
 zoomInButton.addEventListener('click', () => stepZoom(1))
@@ -236,7 +259,10 @@ stage.addEventListener(
   { passive: false },
 )
 
-/** The document from before the open note was touched, so undo steps over the whole edit. */
+/**
+ * The document from before the open note or step label was touched, so undo
+ * steps over the whole edit.
+ */
 let calloutEditOrigin: CaptureDocument | null = null
 
 /** Document state before the text input opened, so undo steps over the whole edit. */
@@ -303,6 +329,63 @@ function finishCalloutEdit(text: string): void {
     return
   }
   const edited = documentWithNote(origin, id, text)
+  store.set(setEditingCallout(commitPreview(previewDocument(state, edited), origin), null))
+}
+
+/** Where the overlay must sit to type over a step badge's label. */
+function stepGeometry(step: StepAnnotation): CalloutInputGeometry {
+  const scale = view.scale()
+  const body = stepBodyRect(step)
+  const fontSize = fitStepFontSize(step, stepTextMeasurer) * scale
+  return {
+    at: stagePoint({ x: body.x, y: body.y }),
+    width: body.width * scale,
+    height: body.height * scale,
+    textWidth: body.width * scale,
+    fontSize,
+    lineHeight: fontSize,
+    color: readableTextColor(step.color),
+    font: stepFont(fontSize),
+  }
+}
+
+function stepById(doc: CaptureDocument, id: string): StepAnnotation | null {
+  const found = doc.annotations.find((annotation) => annotation.id === id)
+  return found?.kind === 'step' ? found : null
+}
+
+/** Opens a step's label for rewriting, typed straight onto the badge. */
+function startStepEdit(step: StepAnnotation): void {
+  const origin = currentDocument(state)
+  calloutEditOrigin = origin
+  store.set(setEditingCallout(setSelectedAnnotation(state, step.id), step.id))
+  calloutInput.open({
+    geometry: stepGeometry(step),
+    initialText: step.text,
+    onInput: (text) => {
+      const previewed = withStepText(origin, step.id, text)
+      store.set(previewDocument(state, previewed))
+      const updated = stepById(previewed, step.id)
+      if (updated) calloutInput.reposition(stepGeometry(updated))
+    },
+    onCommit: (text) => finishStepEdit(text),
+    onCancel: () => cancelCalloutEdit(),
+  })
+}
+
+/** Writes the label as one undoable change. A blank or unchanged label keeps the old one. */
+function finishStepEdit(text: string): void {
+  const origin = calloutEditOrigin
+  const id = state.editingCalloutId
+  calloutEditOrigin = null
+  if (!origin || !id) return
+
+  const before = stepById(origin, id)
+  if (!before || !text || before.text === text) {
+    store.set(setEditingCallout(previewDocument(state, origin), null))
+    return
+  }
+  const edited = withStepText(origin, id, text)
   store.set(setEditingCallout(commitPreview(previewDocument(state, edited), origin), null))
 }
 
@@ -390,6 +473,7 @@ attachInteractions(canvas, view, store, {
   },
 
   onCalloutEdit: (callout) => startCalloutEdit(callout),
+  onStepEdit: (step) => startStepEdit(step),
 })
 
 function flattenToDataUrl(): string {
@@ -558,11 +642,11 @@ void filmstrip.refresh().then(() => {
 draw()
 
 const SHORTCUT_TOOLS: Readonly<Record<string, ToolId>> = {
-  b: 'box', a: 'arrow', t: 'text', h: 'highlight', x: 'blur', n: 'callout', c: 'crop',
+  b: 'box', a: 'arrow', t: 'text', h: 'highlight', x: 'blur', n: 'callout', s: 'step', c: 'crop',
 }
 
 document.addEventListener('keydown', (event) => {
-  if (event.target instanceof HTMLElement && event.target.closest('#quick-styles input')) return
+  if (event.target instanceof HTMLElement && event.target.closest('#quick-styles input, #quick-styles select')) return
   const meta = event.metaKey || event.ctrlKey
 
   if (isCropping() && (event.key === 'Enter' || event.key === 'Escape')) {

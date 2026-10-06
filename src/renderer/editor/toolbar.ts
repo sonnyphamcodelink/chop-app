@@ -3,12 +3,29 @@ import type { ToolId } from '@shared/tools'
 const SVG_NS = 'http://www.w3.org/2000/svg'
 
 type IconPart = {
-  readonly tag: 'rect' | 'circle' | 'path'
+  readonly tag: 'rect' | 'circle' | 'path' | 'text'
   readonly attrs: Readonly<Record<string, string | number>>
+  /** Text content, for `text` parts. */
+  readonly label?: string
 }
 
 /** Shared by every stroked part so the icons read as one family. */
 const STROKED = { fill: 'none', stroke: 'currentColor', 'stroke-width': 1.6 } as const
+
+/** One numbered disc of the Step icon: filled, with the digit knocked out. */
+function stepDisc(cx: number, cy: number, label: string): readonly IconPart[] {
+  return [
+    { tag: 'circle', attrs: { cx, cy, r: 4.3, fill: 'currentColor' } },
+    {
+      tag: 'text',
+      label,
+      attrs: {
+        x: cx, y: cy + 2.1, 'text-anchor': 'middle', 'font-size': 6, 'font-weight': 700,
+        'font-family': 'system-ui, sans-serif', fill: 'var(--tb-icon-knockout, #fff)',
+      },
+    },
+  ]
+}
 
 const TOOL_ICONS: Readonly<Record<ToolId, readonly IconPart[]>> = {
   box: [{ tag: 'rect', attrs: { x: 3, y: 4, width: 14, height: 12, rx: 2, ...STROKED } }],
@@ -45,6 +62,7 @@ const TOOL_ICONS: Readonly<Record<ToolId, readonly IconPart[]>> = {
       attrs: { d: 'M3 4H17V13H9L5.5 16.5V13H3V4Z', 'stroke-linejoin': 'round', ...STROKED },
     },
   ],
+  step: [...stepDisc(10, 5.2, '1'), ...stepDisc(5, 14.5, '2'), ...stepDisc(15, 14.5, '3')],
   crop: [
     {
       tag: 'path',
@@ -75,6 +93,7 @@ const TOOLS: readonly { readonly id: ToolId; readonly label: string; readonly ke
   { id: 'highlight', label: 'Highlight', key: 'H' },
   { id: 'blur', label: 'Blur', key: 'X' },
   { id: 'callout', label: 'Callout', key: 'N' },
+  { id: 'step', label: 'Step', key: 'S' },
   { id: 'crop', label: 'Crop', key: 'C' },
 ]
 
@@ -97,6 +116,7 @@ function createIcon(parts: readonly IconPart[]): SVGSVGElement {
   for (const part of parts) {
     const node = document.createElementNS(SVG_NS, part.tag)
     for (const [name, value] of Object.entries(part.attrs)) node.setAttribute(name, String(value))
+    if (part.label) node.textContent = part.label
     svg.append(node)
   }
   return svg

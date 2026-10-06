@@ -9,8 +9,10 @@ import {
   annotationHandleRects,
   handleRects,
   isEditableAnnotation,
+  stepHandleRects,
 } from '@shared/hit-test'
-import { annotationFont, type CanvasFactory, renderDocument } from '@shared/render'
+import { annotationFont, type CanvasFactory, renderDocument, stepFont } from '@shared/render'
+import { hideStepText } from '@shared/step'
 import { documentWithDraft } from '@shared/tools'
 
 export const browserCanvasFactory: CanvasFactory = (width, height) => {
@@ -30,6 +32,14 @@ export function textMeasurer(fontSize: number): (text: string) => number {
   measuringContext ??= browserCanvasFactory(1, 1).ctx
   const ctx = measuringContext
   ctx.font = annotationFont(fontSize)
+  return (text) => ctx.measureText(text).width
+}
+
+/** Measures a step label at `fontSize`, in its heavier face. */
+export function stepTextMeasurer(fontSize: number): (text: string) => number {
+  measuringContext ??= browserCanvasFactory(1, 1).ctx
+  const ctx = measuringContext
+  ctx.font = stepFont(fontSize)
   return (text) => ctx.measureText(text).width
 }
 
@@ -242,6 +252,17 @@ export function createCanvasView(canvas: HTMLCanvasElement): CanvasView {
         )
       }
       drawCalloutTailHandle(ctx, annotation.tail, scale)
+    } else if (annotation.kind === 'step') {
+      for (const handle of stepHandleRects(annotation)) {
+        drawResizeHandle(
+          ctx,
+          {
+            x: handle.rect.x + handle.rect.width / 2,
+            y: handle.rect.y + handle.rect.height / 2,
+          },
+          scale,
+        )
+      }
     } else if (isEditableAnnotation(annotation)) {
       for (const handle of annotationHandleRects(annotation)) {
         drawResizeHandle(
@@ -271,7 +292,10 @@ export function createCanvasView(canvas: HTMLCanvasElement): CanvasView {
       if (!image) return
       const reframing = state.cropSession?.mode === 'reframe'
       const baseDoc = state.editingCalloutId
-        ? hideCalloutText(currentDocument(state), state.editingCalloutId)
+        ? hideStepText(
+            hideCalloutText(currentDocument(state), state.editingCalloutId),
+            state.editingCalloutId,
+          )
         : currentDocument(state)
       const doc = reframing
         ? { ...baseDoc, cropRect: null }

@@ -54,6 +54,25 @@ export type CalloutAnnotation = {
   readonly strokeWidth?: number
 }
 
+export type StepShape = 'circle' | 'pin' | 'square'
+
+/** How step labels count: 1, 2, 3 · a, b, c · A, B, C. */
+export type StepSequence = 'number' | 'lower' | 'upper'
+
+/** A numbered badge marking one step in a sequence. */
+export type StepAnnotation = {
+  readonly id: string
+  readonly kind: 'step'
+  readonly center: Point
+  /** Badge diameter, in image pixels. */
+  readonly size: number
+  /** Usually the next label in `sequence`, but the user may rewrite it. */
+  readonly text: string
+  readonly color: string
+  readonly shape: StepShape
+  readonly sequence: StepSequence
+}
+
 export type Annotation =
   | BoxAnnotation
   | ArrowAnnotation
@@ -61,6 +80,7 @@ export type Annotation =
   | HighlightAnnotation
   | BlurAnnotation
   | CalloutAnnotation
+  | StepAnnotation
 
 export type CaptureDocument = {
   readonly id: string
@@ -123,7 +143,7 @@ export function serializeDocument(doc: CaptureDocument): string {
 }
 
 const KINDS: readonly Annotation['kind'][] = [
-  'box', 'arrow', 'text', 'highlight', 'blur', 'callout',
+  'box', 'arrow', 'text', 'highlight', 'blur', 'callout', 'step',
 ]
 
 function isRect(value: unknown): value is Rect {

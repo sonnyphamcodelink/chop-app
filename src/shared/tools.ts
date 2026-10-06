@@ -2,19 +2,33 @@ import { calloutFontSizeFor, calloutRectFor, defaultCalloutSize } from './callou
 import {
   CALLOUT_ARROW_WIDTH_MULTIPLIER,
   CALLOUT_MIN_TAIL_LENGTH,
+  DEFAULT_ARROW_STROKE_WIDTH,
   DEFAULT_FONT_SIZE,
   DEFAULT_STROKE_WIDTH,
   MIN_SELECTION_DIMENSION,
+  STEP_DEFAULT_SIZE,
 } from './constants'
-import { type Annotation, type CalloutAnnotation, type CaptureDocument, outputSize } from './document'
+import {
+  type Annotation,
+  type CalloutAnnotation,
+  type CaptureDocument,
+  outputSize,
+  type StepSequence,
+  type StepShape,
+} from './document'
 import { isDegenerateRect, normalizeRect, type Point, type Rect, type Size } from './geometry'
 
-export type ToolId = 'box' | 'arrow' | 'text' | 'highlight' | 'blur' | 'callout' | 'crop'
+export type ToolId =
+  | 'box' | 'arrow' | 'text' | 'highlight' | 'blur' | 'callout' | 'step' | 'crop'
 
 export type ToolStyle = {
   readonly color: string
   readonly strokeWidth: number
   readonly fontSize: number
+  readonly stepShape: StepShape
+  readonly stepSequence: StepSequence
+  /** Step badge diameter, in image pixels. */
+  readonly stepSize: number
 }
 
 export type Draft = {
@@ -30,7 +44,15 @@ export function defaultStyle(): ToolStyle {
     color: DEFAULT_COLOR,
     strokeWidth: DEFAULT_STROKE_WIDTH,
     fontSize: DEFAULT_FONT_SIZE,
+    stepShape: 'circle',
+    stepSequence: 'number',
+    stepSize: STEP_DEFAULT_SIZE,
   }
+}
+
+/** The line width a tool starts with until the user picks another. */
+export function defaultStrokeWidthFor(tool: ToolId): number {
+  return tool === 'arrow' ? DEFAULT_ARROW_STROKE_WIDTH : DEFAULT_STROKE_WIDTH
 }
 
 export function beginDraft(tool: ToolId, point: Point): Draft {

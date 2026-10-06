@@ -7,6 +7,7 @@ import {
   type CalloutAnnotation,
   type CaptureDocument,
   outputSize,
+  type StepAnnotation,
   updateAnnotation,
 } from '@shared/document'
 import {
@@ -35,7 +36,9 @@ import {
   moveAnnotation,
   resizeAnnotation,
   resizeRect,
+  stepHitAtPoint,
 } from '@shared/hit-test'
+import { createStep, nextStepLabel, resizeStep } from '@shared/step'
 import { beginDraft, draftToAnnotation, isDrawingTool, updateDraft } from '@shared/tools'
 import { type CanvasView, textMeasurer } from './canvas-view'
 
@@ -52,6 +55,8 @@ export type InteractionHandlers = {
   onTextPoint(event: MouseEvent, imagePoint: Point): void
   /** A callout was clicked, to write or rewrite its note. */
   onCalloutEdit(callout: CalloutAnnotation): void
+  /** A step was clicked, to rewrite its label. */
+  onStepEdit(step: StepAnnotation): void
 }
 
 type Gesture =
@@ -85,6 +90,22 @@ type Gesture =
       readonly callout: CalloutAnnotation
       readonly origin: CaptureDocument
       readonly start: Point
+      readonly moved: boolean
+    }
+  | {
+      readonly mode: 'step-move'
+      readonly step: StepAnnotation
+      readonly origin: CaptureDocument
+      readonly last: Point
+      readonly moved: boolean
+      /** Just placed by the Step tool: releasing keeps it rather than opening the editor. */
+      readonly placed: boolean
+    }
+  | {
+      readonly mode: 'step-resize'
+      readonly step: StepAnnotation
+      readonly handle: HandleId
+      readonly origin: CaptureDocument
       readonly moved: boolean
     }
   | {
@@ -144,6 +165,36 @@ export function attachInteractions(
     return handleAtPoint(rect, point, view.scale())
   }
 
+  /** Grabs a callout bubble: a drag moves it, a click opens it for typing. */
+  function beginCalloutMove(state: EditorState, callout: CalloutAnnotation, point: Point): void {
+    store.set(setSelectedAnnotation(state, callout.id))
+    canvas.style.cursor = canvasCursor({ kind: 'move' })
+    gesture = {
+      mode: 'callout-move',
+      callout,
+      origin: currentDocument(state),
+      last: point,
+      moved: false,
+    }
+  }
+
+  /**
+   * Drops the next step under the pointer. It is previewed rather than
+   * committed, so dragging before release positions it in the same undo step.
+   */
+  function placeStep(state: EditorState, point: Point): void {
+    const origin = currentDocument(state)
+    const step = createStep(
+      point,
+      state.style,
+      newId(),
+      nextStepLabel(origin, state.style.stepSequence),
+    )
+    store.set(previewDocument(state, addAnnotation(origin, step)))
+    canvas.style.cursor = canvasCursor({ kind: 'move' })
+    gesture = { mode: 'step-move', step, origin, last: point, moved: false, placed: true }
+  }
+
   canvas.addEventListener('mousedown', (event) => {
     if (event.button !== 0) return
     // Committing first, because the press below may suppress the overlay's blur.
@@ -158,6 +209,26 @@ export function attachInteractions(
       const editHit = editableHitAtPoint(currentDocument(state), point, view.scale())
       const drawing = isDrawingTool(state.tool)
       const textTool = state.tool === 'text'
+
+      // Steps sit on top of what they number, so they answer first: a corner
+      // resizes, and the badge moves on drag or opens its label on click.
+      const stepHit = stepHitAtPoint(currentDocument(state), point, view.scale())
+      if (stepHit) {
+        event.preventDefault()
+        const origin = currentDocument(state)
+        store.set(setSelectedAnnotation(state, stepHit.step.id))
+        if (stepHit.handle) {
+          canvas.style.cursor = canvasCursor({
+            kind: 'resize',
+            cursor: cursorForHandle(stepHit.handle),
+          })
+          gesture = { mode: 'step-resize', step: stepHit.step, handle: stepHit.handle, origin, moved: false }
+          return
+        }
+        canvas.style.cursor = canvasCursor({ kind: 'move' })
+        gesture = { mode: 'step-move', step: stepHit.step, origin, last: point, moved: false, placed: false }
+        return
+      }
 
       // Handles always win, so an unselected shape can still be resized and a
       // callout tip re-aimed without selecting first.
@@ -242,16 +313,7 @@ export function attachInteractions(
         // opens for typing) in any tool.
         if (calloutBody) {
           event.preventDefault()
-          const origin = currentDocument(state)
-          store.set(setSelectedAnnotation(state, calloutBody.id))
-          canvas.style.cursor = canvasCursor({ kind: 'move' })
-          gesture = {
-            mode: 'callout-move',
-            callout: calloutBody,
-            origin,
-            last: point,
-            moved: false,
-          }
+          beginCalloutMove(state, calloutBody, point)
           return
         }
         if (editableBody) {
@@ -264,21 +326,21 @@ export function attachInteractions(
         }
         // Pressing empty canvas drops the selection; trim/draw below takes over.
         store.set(setSelectedAnnotation(state, null))
+      } else if (state.tool === 'step') {
+        // Steps go on top of anything, boxes included; only a callout bubble
+        // keeps its own click, so any tool can reopen a note.
+        if (calloutBody) {
+          event.preventDefault()
+          beginCalloutMove(state, calloutBody, point)
+          return
+        }
+        store.set(setSelectedAnnotation(state, null))
       } else if (textTool) {
         // The Text tool places inside boxes. Callouts still win so any tool can
         // reopen a note; boxes/arrows/text only move once selected.
         if (calloutBody) {
           event.preventDefault()
-          const origin = currentDocument(state)
-          store.set(setSelectedAnnotation(state, calloutBody.id))
-          canvas.style.cursor = canvasCursor({ kind: 'move' })
-          gesture = {
-            mode: 'callout-move',
-            callout: calloutBody,
-            origin,
-            last: point,
-            moved: false,
-          }
+          beginCalloutMove(state, calloutBody, point)
           return
         }
         if (editableBody) {
@@ -305,16 +367,7 @@ export function attachInteractions(
         // Crop and any future non-drawing tool: bodies grab immediately.
         if (calloutBody) {
           event.preventDefault()
-          const origin = currentDocument(state)
-          store.set(setSelectedAnnotation(state, calloutBody.id))
-          canvas.style.cursor = canvasCursor({ kind: 'move' })
-          gesture = {
-            mode: 'callout-move',
-            callout: calloutBody,
-            origin,
-            last: point,
-            moved: false,
-          }
+          beginCalloutMove(state, calloutBody, point)
           return
         }
         if (editableBody) {
@@ -360,6 +413,12 @@ export function attachInteractions(
       return
     }
 
+    if (state.tool === 'step') {
+      event.preventDefault()
+      placeStep(store.get(), point)
+      return
+    }
+
     if (state.tool === 'text') {
       // The default mousedown focus change would blur the field straight away.
       event.preventDefault()
@@ -385,6 +444,36 @@ export function attachInteractions(
     if (gesture.mode === 'draw') {
       canvas.style.cursor = RETICLE_CURSOR
       if (state.draft) store.set(setDraft(state, updateDraft(state.draft, point)))
+      return
+    }
+
+    if (gesture.mode === 'step-move') {
+      const dx = point.x - gesture.last.x
+      const dy = point.y - gesture.last.y
+      const moved = gesture.moved || Math.hypot(dx, dy) * view.scale() > CALLOUT_DRAG_THRESHOLD
+      if (!moved) return
+      store.set(
+        previewDocument(
+          state,
+          updateAnnotation(currentDocument(state), gesture.step.id, (annotation) =>
+            moveAnnotation(annotation, dx, dy),
+          ),
+        ),
+      )
+      gesture = { ...gesture, last: point, moved: true }
+      return
+    }
+
+    if (gesture.mode === 'step-resize') {
+      store.set(
+        previewDocument(
+          state,
+          updateAnnotation(currentDocument(state), gesture.step.id, (annotation) =>
+            annotation.kind === 'step' ? resizeStep(annotation, point) : annotation,
+          ),
+        ),
+      )
+      gesture = { ...gesture, moved: true }
       return
     }
 
@@ -519,6 +608,17 @@ export function attachInteractions(
       return
     }
 
+    const stepHit = stepHitAtPoint(currentDocument(state), point, view.scale())
+    if (stepHit) {
+      canvas.style.cursor = canvasCursor(
+        stepHit.handle
+          ? { kind: 'resize', cursor: cursorForHandle(stepHit.handle) }
+          : { kind: 'move' },
+      )
+      store.set(setHoveredAnnotation(state, stepHit.step.id))
+      return
+    }
+
     const calloutHit = calloutHitAtPoint(currentDocument(state), point, view.scale())
     if (calloutHit) {
       canvas.style.cursor = canvasCursor(calloutCursor(calloutHit))
@@ -581,6 +681,19 @@ export function attachInteractions(
     const state = store.get()
     const finished = gesture
     gesture = null
+
+    if (finished.mode === 'step-move') {
+      // A placed step is kept wherever it was dropped. An existing one that
+      // never really moved was a click, so its label opens for editing.
+      if (finished.placed || finished.moved) store.set(commitPreview(state, finished.origin))
+      else handlers.onStepEdit(finished.step)
+      return
+    }
+
+    if (finished.mode === 'step-resize') {
+      if (finished.moved) store.set(commitPreview(state, finished.origin))
+      return
+    }
 
     if (finished.mode === 'callout-move') {
       // A bubble that never really moved was a click, so it opens for typing.
@@ -662,6 +775,13 @@ export function attachInteractions(
     gesture = null
 
     // Leaving mid-move keeps the shape where it got to, as one history entry.
+    if (abandoned.mode === 'step-move' || abandoned.mode === 'step-resize') {
+      const changed = abandoned.mode === 'step-move'
+        ? abandoned.placed || abandoned.moved
+        : abandoned.moved
+      if (changed) store.set(commitPreview(store.get(), abandoned.origin))
+      return
+    }
     if (
       abandoned.mode === 'callout-move' ||
       abandoned.mode === 'callout-tail' ||

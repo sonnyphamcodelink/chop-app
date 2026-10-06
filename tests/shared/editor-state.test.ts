@@ -35,6 +35,19 @@ describe('createEditorState', () => {
 })
 
 describe('setTool', () => {
+  it('starts boxes at 10 and arrows at 15 while the width is untouched', () => {
+    const state = createEditorState(base)
+    expect(state.style.strokeWidth).toBe(10)
+    const arrow = setTool(state, 'arrow')
+    expect(arrow.style.strokeWidth).toBe(15)
+    expect(setTool(arrow, 'box').style.strokeWidth).toBe(10)
+  })
+
+  it('keeps a width the user chose when switching tools', () => {
+    const chosen = setStyle(createEditorState(base), { strokeWidth: 20 })
+    expect(setTool(chosen, 'arrow').style.strokeWidth).toBe(20)
+  })
+
   it('switches the active tool and clears the draft', () => {
     const drafted = setDraft(createEditorState(base), beginDraft('box', { x: 1, y: 1 }))
     const next = setTool(drafted, 'arrow')

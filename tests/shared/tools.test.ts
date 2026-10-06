@@ -18,7 +18,7 @@ import {
   updateDraft,
 } from '@shared/tools'
 
-const style = { color: '#ff3b30', strokeWidth: 3, fontSize: 18 }
+const style = { ...defaultStyle(), color: '#ff3b30', strokeWidth: 3, fontSize: 18 }
 
 /** The capture a draft lands on, retina-sized. Only a callout's default size reads it. */
 const view = { width: 2000, height: 1200 }
@@ -33,6 +33,10 @@ describe('defaultStyle', () => {
       strokeWidth: DEFAULT_STROKE_WIDTH,
       fontSize: DEFAULT_FONT_SIZE,
     })
+  })
+
+  it('starts step badges at 64 px', () => {
+    expect(defaultStyle().stepSize).toBe(64)
   })
 
   it('provides a colour', () => {

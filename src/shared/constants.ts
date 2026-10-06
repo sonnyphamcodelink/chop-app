@@ -30,6 +30,8 @@ export const STROKE_WIDTHS = { thin: 3, medium: 6, thick: 10 } as const
 
 /** New annotations start with a 10 pt stroke. */
 export const DEFAULT_STROKE_WIDTH = STROKE_WIDTHS.thick
+/** Arrows start heavier than the other stroked tools. */
+export const DEFAULT_ARROW_STROKE_WIDTH = 15
 export const DEFAULT_FONT_SIZE = 40
 
 /** Callout bubble corner rounding, in image pixels. */
@@ -84,3 +86,21 @@ export const HANDLE_HIT_SIZE = 24
  * affordance for unselected boxes.
  */
 export const BOX_EDGE_HIT_SIZE = 12
+
+/** Diameter a new step badge starts at, in image pixels. */
+export const STEP_DEFAULT_SIZE = 64
+
+/** Smallest a step badge may be resized to, in image pixels. */
+export const STEP_MIN_SIZE = 16
+
+/** Largest a step badge may be set to from the size field, in image pixels. */
+export const STEP_MAX_SIZE = 200
+
+/** A one-character label's height as a share of the badge diameter. */
+export const STEP_FONT_RATIO = 0.55
+
+/** Widest a label may run, as a share of the badge diameter, before it shrinks. */
+export const STEP_TEXT_WIDTH_RATIO = 0.78
+
+/** How far a pin's point reaches from the centre, as a multiple of its radius. */
+export const STEP_PIN_TIP_RATIO = 1.7

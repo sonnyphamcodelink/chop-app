@@ -5,6 +5,7 @@ import type {
   BoxAnnotation,
   CalloutAnnotation,
   CaptureDocument,
+  StepAnnotation,
   TextAnnotation,
 } from './document'
 import {
@@ -14,6 +15,7 @@ import {
   type Rect,
   rectContains,
 } from './geometry'
+import { stepBodyRect, stepBounds } from './step'
 
 export type HandleId = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w'
 
@@ -56,6 +58,8 @@ export function annotationBounds(annotation: Annotation): Rect {
         },
       )
     }
+    case 'step':
+      return stepBounds(annotation)
     case 'text':
       return {
         x: annotation.at.x,
@@ -159,6 +163,41 @@ export function boxEdgeHitAtPoint(
     if (isPointNearBoxEdge(annotation.rect, point, scale)) return annotation
   }
   return null
+}
+
+export type StepHit = {
+  readonly step: StepAnnotation
+  /** A corner resizes around the centre; null means the badge itself. */
+  readonly handle: HandleId | null
+}
+
+const STEP_CORNERS: readonly HandleId[] = ['nw', 'ne', 'se', 'sw']
+
+/** Front-most step under the point. Corner handles win over the badge. */
+export function stepHitAtPoint(
+  doc: CaptureDocument,
+  point: Point,
+  scale = 1,
+): StepHit | null {
+  for (let index = doc.annotations.length - 1; index >= 0; index -= 1) {
+    const annotation = doc.annotations[index]!
+    if (annotation.kind !== 'step') continue
+    const body = stepBodyRect(annotation)
+    const anchors = handleAnchors(body)
+    const size = hitSize(body, scale)
+    const handle = STEP_CORNERS.find((id) => rectContains(squareAt(anchors[id], size), point))
+    if (handle) return { step: annotation, handle }
+    if (rectContains(stepBounds(annotation), point)) return { step: annotation, handle: null }
+  }
+  return null
+}
+
+/** Drawn corner handles for a selected step. */
+export function stepHandleRects(
+  step: StepAnnotation,
+): readonly { readonly id: HandleId; readonly rect: Rect }[] {
+  const anchors = handleAnchors(stepBodyRect(step))
+  return STEP_CORNERS.map((id) => ({ id, rect: squareAt(anchors[id], HANDLE_SIZE) }))
 }
 
 export type EditableHit = {
@@ -356,5 +395,10 @@ export function moveAnnotation(
       return { ...annotation, rect: offsetRect(annotation.rect, dx, dy) }
     case 'text':
       return { ...annotation, at: { x: annotation.at.x + dx, y: annotation.at.y + dy } }
+    case 'step':
+      return {
+        ...annotation,
+        center: { x: annotation.center.x + dx, y: annotation.center.y + dy },
+      }
   }
 }

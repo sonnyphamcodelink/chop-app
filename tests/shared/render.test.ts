@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { BLUR_SAMPLE_SIZE } from '@shared/constants'
 import { addAnnotation, type Annotation, createDocument, setCrop } from '@shared/document'
 import { type CanvasFactory, renderDocument } from '@shared/render'
-import { beginDraft, documentWithDraft, updateDraft } from '@shared/tools'
+import { beginDraft, defaultStyle, documentWithDraft, updateDraft } from '@shared/tools'
 import { createMockContext, type MockContext, opNames } from '../helpers/mock-context'
 
 const image = {} as CanvasImageSource
@@ -269,6 +269,34 @@ describe('renderDocument', () => {
     expect(colours).toEqual(['#111111', '#222222'])
   })
 
+  it('draws a step badge in its colour with the label centred in readable text', () => {
+    const { ctx, ops } = createMockContext()
+    const doc = addAnnotation(createDocument('d', 800, 600), {
+      id: 's', kind: 'step',
+      center: { x: 100, y: 120 }, size: 40,
+      text: '7', color: '#f0c94d', shape: 'circle', sequence: 'number',
+    })
+    renderDocument(ctx, image, doc, factory())
+    expect(ops).toContainEqual({ name: 'arc', args: [100, 120, 20, 0, Math.PI * 2] })
+    expect(ops).toContainEqual({ name: 'set:fillStyle', args: ['#f0c94d'] })
+    // Yellow is light, so the label switches to black to stay legible.
+    expect(ops).toContainEqual({ name: 'set:fillStyle', args: ['#000000'] })
+    expect(ops.find((op) => op.name === 'fillText')?.args.slice(0, 3)).toEqual(['7', 100, 120])
+  })
+
+  it('draws a pin badge out to its point', () => {
+    const { ctx, ops } = createMockContext()
+    const doc = addAnnotation(createDocument('d', 800, 600), {
+      id: 's', kind: 'step',
+      center: { x: 100, y: 100 }, size: 40,
+      text: '1', color: '#e5484d', shape: 'pin', sequence: 'number',
+    })
+    renderDocument(ctx, image, doc, factory())
+    const tip = ops.find((op) => op.name === 'lineTo')
+    expect(tip?.args[0]).toBeGreaterThan(120)
+    expect(tip?.args[1]).toBe(100)
+  })
+
   it('balances every save with a restore', () => {
     const { ctx, ops } = createMockContext()
     const doc = addAnnotation(createDocument('d', 10, 10), {
@@ -284,7 +312,7 @@ describe('renderDocument', () => {
 
   it('paints a draft box on top when the document includes documentWithDraft', () => {
     const { ctx, ops } = createMockContext()
-    const style = { color: '#ff3b30', strokeWidth: 3, fontSize: 18 }
+    const style = { ...defaultStyle(), color: '#ff3b30', strokeWidth: 3, fontSize: 18 }
     const draft = updateDraft(beginDraft('box', { x: 10, y: 10 }), { x: 110, y: 90 })
     const doc = documentWithDraft(createDocument('d', 800, 600), draft, style)
     renderDocument(ctx, image, doc, factory())

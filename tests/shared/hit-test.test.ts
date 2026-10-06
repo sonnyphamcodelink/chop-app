@@ -15,6 +15,7 @@ import {
   moveAnnotation,
   resizeAnnotation,
   resizeRect,
+  stepHitAtPoint,
 } from '@shared/hit-test'
 
 const box: Annotation = {
@@ -353,5 +354,37 @@ describe('box edge grab', () => {
     // 20px left of the border: outside the 12px grab area at 1x, inside at 0.25x.
     expect(isPointNearBoxEdge(rect, { x: -10, y: 30 }, 1)).toBe(false)
     expect(isPointNearBoxEdge(rect, { x: -10, y: 30 }, 0.25)).toBe(true)
+  })
+})
+
+describe('steps', () => {
+  const badge: Annotation = {
+    id: 'step', kind: 'step',
+    center: { x: 300, y: 300 }, size: 40,
+    text: '1', color: '#f00', shape: 'pin', sequence: 'number',
+  }
+  const doc = addAnnotation(addAnnotation(createDocument('d', 800, 600), box), badge)
+
+  it('bounds a pin from the badge out to its point', () => {
+    const bounds = annotationBounds(badge)
+    expect(bounds.x).toBe(280)
+    expect(bounds.x + bounds.width).toBeGreaterThan(320)
+  })
+
+  it('moves the badge by its centre', () => {
+    expect(moveAnnotation(badge, 5, -5)).toMatchObject({ center: { x: 305, y: 295 } })
+  })
+
+  it('hits the badge body', () => {
+    expect(stepHitAtPoint(doc, { x: 300, y: 300 })).toMatchObject({ step: { id: 'step' }, handle: null })
+  })
+
+  it('hits a corner handle before the body', () => {
+    expect(stepHitAtPoint(doc, { x: 281, y: 281 })).toMatchObject({ handle: 'nw' })
+  })
+
+  it('misses empty canvas and other shapes', () => {
+    expect(stepHitAtPoint(doc, { x: 500, y: 500 })).toBeNull()
+    expect(stepHitAtPoint(doc, { x: 20, y: 20 })).toBeNull()
   })
 })

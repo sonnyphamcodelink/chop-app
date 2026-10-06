@@ -14,9 +14,11 @@ import type {
   CalloutAnnotation,
   CaptureDocument,
   HighlightAnnotation,
+  StepAnnotation,
   TextAnnotation,
 } from './document'
 import type { Rect } from './geometry'
+import { fitStepFontSize, stepBodyRect, stepPinTip } from './step'
 
 /** Creates an offscreen drawing surface. Injected so rendering stays testable. */
 export type CanvasFactory = (
@@ -105,6 +107,11 @@ export function annotationFont(fontSize: number): string {
   return `${fontSize}px -apple-system, system-ui, sans-serif`
 }
 
+/** Step labels are set heavier than notes so a single digit reads at a glance. */
+export function stepFont(fontSize: number): string {
+  return `600 ${annotationFont(fontSize)}`
+}
+
 function drawText(ctx: CanvasRenderingContext2D, text: TextAnnotation): void {
   ctx.fillStyle = text.color
   ctx.font = annotationFont(text.fontSize)
@@ -175,6 +182,55 @@ function drawCallout(ctx: CanvasRenderingContext2D, callout: CalloutAnnotation):
   ctx.restore()
 }
 
+/** Square badges keep softened corners, as a share of their size. */
+const STEP_SQUARE_CORNER_RATIO = 0.2
+
+/** Traces a teardrop: the badge circle drawn out to a point on its right. */
+function tracePin(ctx: CanvasRenderingContext2D, step: StepAnnotation): void {
+  const radius = step.size / 2
+  const tip = stepPinTip(step)
+  // Where the straight sides meet the circle tangentially.
+  const spread = Math.acos(radius / (tip.x - step.center.x))
+  ctx.beginPath()
+  ctx.arc(step.center.x, step.center.y, radius, spread, Math.PI * 2 - spread)
+  ctx.lineTo(tip.x, tip.y)
+  ctx.closePath()
+}
+
+function traceStepShape(ctx: CanvasRenderingContext2D, step: StepAnnotation): void {
+  switch (step.shape) {
+    case 'circle':
+      ctx.beginPath()
+      ctx.arc(step.center.x, step.center.y, step.size / 2, 0, Math.PI * 2)
+      return
+    case 'square':
+      return traceRoundedRect(ctx, stepBodyRect(step), step.size * STEP_SQUARE_CORNER_RATIO)
+    case 'pin':
+      return tracePin(ctx, step)
+  }
+}
+
+/** A filled badge with its label centred in whichever of black or white reads. */
+function drawStep(ctx: CanvasRenderingContext2D, step: StepAnnotation): void {
+  ctx.save()
+  ctx.fillStyle = step.color
+  traceStepShape(ctx, step)
+  ctx.fill()
+
+  if (step.text) {
+    const fontSize = fitStepFontSize(step, (size) => {
+      ctx.font = stepFont(size)
+      return (text) => ctx.measureText(text).width
+    })
+    ctx.font = stepFont(fontSize)
+    ctx.fillStyle = readableTextColor(step.color)
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillText(step.text, step.center.x, step.center.y)
+  }
+  ctx.restore()
+}
+
 /**
  * Redaction first, looks second. The region is downsampled to a coarse grid,
  * which is what actually destroys the detail — no amount of sharpening brings
@@ -240,6 +296,8 @@ function drawAnnotation(
       return drawBlur(ctx, image, annotation, createCanvas)
     case 'callout':
       return drawCallout(ctx, annotation)
+    case 'step':
+      return drawStep(ctx, annotation)
   }
 }
 

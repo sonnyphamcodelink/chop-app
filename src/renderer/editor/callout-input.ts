@@ -13,6 +13,8 @@ export type CalloutInputGeometry = {
   readonly fontSize: number
   readonly lineHeight: number
   readonly color: string
+  /** CSS font, when the text is not drawn in the plain annotation font. */
+  readonly font?: string
 }
 
 export type CalloutInputOptions = {
@@ -46,7 +48,7 @@ export function createCalloutInput(element: HTMLTextAreaElement): CalloutInput {
 
   function place(geometry: CalloutInputGeometry): void {
     element.style.width = `${geometry.textWidth}px`
-    element.style.font = annotationFont(geometry.fontSize)
+    element.style.font = geometry.font ?? annotationFont(geometry.fontSize)
     element.style.lineHeight = `${geometry.lineHeight}px`
     element.style.color = geometry.color
     element.style.caretColor = geometry.color
