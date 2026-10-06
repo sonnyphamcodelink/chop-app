@@ -35,6 +35,11 @@ describe('canvasCursor', () => {
     expect(canvasCursor({ kind: 'move' })).toBe('move')
     expect(canvasCursor({ kind: 'resize', cursor: 'nwse-resize' })).toBe('nwse-resize')
   })
+
+  it('uses a hand for the box edge grab', () => {
+    expect(canvasCursor({ kind: 'grab' })).toBe('grab')
+    expect(canvasCursor({ kind: 'grabbing' })).toBe('grabbing')
+  })
 })
 
 describe('REGION_RETICLE_CURSOR', () => {

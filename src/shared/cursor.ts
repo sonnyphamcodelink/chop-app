@@ -38,6 +38,8 @@ export const WINDOW_FRAME_GAP = 8
 export type CursorHit =
   | { readonly kind: 'none' }
   | { readonly kind: 'move' }
+  | { readonly kind: 'grab' }
+  | { readonly kind: 'grabbing' }
   | { readonly kind: 'pointer' }
   | { readonly kind: 'resize'; readonly cursor: string }
 
@@ -48,6 +50,10 @@ export function canvasCursor(hit: CursorHit): string {
       return RETICLE_CURSOR
     case 'move':
       return 'move'
+    case 'grab':
+      return 'grab'
+    case 'grabbing':
+      return 'grabbing'
     case 'pointer':
       return 'pointer'
     case 'resize':

@@ -231,12 +231,13 @@ test('a placed box can be moved and resized in any tool mode', async () => {
   const drawn = await savedBox()
 
   // Switch away from Box — editing must still work, like callouts.
+  // Interior drags draw (nesting), so the box moves by its edge.
   await page.getByRole('button', { name: 'Arrow' }).click()
 
-  // Drag the body to the right.
-  await page.mouse.move(box.x + 70, box.y + 55)
+  // Grab the top edge away from the handles and drag right.
+  await page.mouse.move(box.x + 70, box.y + 20)
   await page.mouse.down()
-  await page.mouse.move(box.x + 120, box.y + 55, { steps: 8 })
+  await page.mouse.move(box.x + 120, box.y + 20, { steps: 8 })
   await page.mouse.up()
 
   await expect
@@ -256,6 +257,104 @@ test('a placed box can be moved and resized in any tool mode', async () => {
   await expect
     .poll(async () => (await savedBox())?.rect.width, { timeout: 10_000 })
     .toBeGreaterThan(moved.rect.width)
+})
+
+test('drawing inside a box nests a second box instead of moving the outer one', async () => {
+  await sendCapture({
+    id: 'e2e-box-nest',
+    dataUrl: ONE_PIXEL_PNG,
+    width: 400,
+    height: 300,
+    createdAt: new Date().toISOString(),
+  })
+
+  const page = await editorPage()
+  await expect(page.locator('#empty')).toBeHidden()
+  await page.getByRole('button', { name: 'Box' }).click()
+
+  const canvas = page.locator('#canvas')
+  const box = await canvas.boundingBox()
+  if (!box) throw new Error('canvas has no bounding box')
+
+  // Outer box from (20,20) to (200,150).
+  await page.mouse.move(box.x + 20, box.y + 20)
+  await page.mouse.down()
+  await page.mouse.move(box.x + 200, box.y + 150)
+  await page.mouse.up()
+
+  await expect
+    .poll(async () => (await savedAnnotations()) as readonly unknown[], { timeout: 10_000 })
+    .toHaveLength(1)
+  const outer = await savedBox()
+
+  // Inner drag fully inside the outer box must draw, not move the outer.
+  await page.mouse.move(box.x + 50, box.y + 50)
+  await page.mouse.down()
+  await page.mouse.move(box.x + 120, box.y + 100, { steps: 8 })
+  await page.mouse.up()
+
+  await expect
+    .poll(async () => (await savedAnnotations()) as readonly unknown[], { timeout: 10_000 })
+    .toHaveLength(2)
+
+  const annotations = (await savedAnnotations()) as readonly {
+    kind: string
+    rect: { x: number; y: number; width: number; height: number }
+  }[]
+  const boxes = annotations.filter((a) => a.kind === 'box')
+  expect(boxes).toHaveLength(2)
+  // Outer box stayed where it was drawn.
+  expect(boxes[0]?.rect).toEqual(outer.rect)
+  // Inner box is contained within the outer one.
+  const inner = boxes[1]?.rect
+  if (!inner) throw new Error('inner box is missing')
+  expect(inner.x).toBeGreaterThanOrEqual(outer.rect.x)
+  expect(inner.y).toBeGreaterThanOrEqual(outer.rect.y)
+  expect(inner.x + inner.width).toBeLessThanOrEqual(outer.rect.x + outer.rect.width)
+  expect(inner.y + inner.height).toBeLessThanOrEqual(outer.rect.y + outer.rect.height)
+})
+
+test('grabbing a box edge moves it without pre-selecting', async () => {
+  await sendCapture({
+    id: 'e2e-box-edge-move',
+    dataUrl: ONE_PIXEL_PNG,
+    width: 400,
+    height: 300,
+    createdAt: new Date().toISOString(),
+  })
+
+  const page = await editorPage()
+  await expect(page.locator('#empty')).toBeHidden()
+  await page.getByRole('button', { name: 'Box' }).click()
+
+  const canvas = page.locator('#canvas')
+  const box = await canvas.boundingBox()
+  if (!box) throw new Error('canvas has no bounding box')
+
+  // Outer box from (20,20) to (200,150).
+  await page.mouse.move(box.x + 20, box.y + 20)
+  await page.mouse.down()
+  await page.mouse.move(box.x + 200, box.y + 150)
+  await page.mouse.up()
+
+  await expect
+    .poll(async () => (await savedAnnotations()) as readonly unknown[], { timeout: 10_000 })
+    .toHaveLength(1)
+  const outer = await savedBox()
+
+  // Grab the left edge away from the corner/midpoint handles and drag right.
+  // No click-to-select first: the edge is the move affordance.
+  await page.mouse.move(box.x + 20, box.y + 52)
+  await page.mouse.down()
+  await page.mouse.move(box.x + 70, box.y + 52, { steps: 8 })
+  await page.mouse.up()
+
+  await expect
+    .poll(async () => (await savedBox())?.rect.x, { timeout: 10_000 })
+    .toBeCloseTo(outer.rect.x + 50, 0)
+  await expect
+    .poll(async () => (await savedAnnotations()) as readonly unknown[], { timeout: 10_000 })
+    .toHaveLength(1)
 })
 
 test('a selected box is deleted by the Delete key', async () => {

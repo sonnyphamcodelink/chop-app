@@ -1,4 +1,4 @@
-import { HANDLE_HIT_SIZE, HANDLE_SIZE } from './constants'
+import { BOX_EDGE_HIT_SIZE, HANDLE_HIT_SIZE, HANDLE_SIZE } from './constants'
 import type {
   Annotation,
   ArrowAnnotation,
@@ -116,6 +116,47 @@ export function calloutHitAtPoint(
     if (rectContains(annotation.rect, point)) {
       return { callout: annotation, part: 'body' }
     }
+  }
+  return null
+}
+
+/**
+ * True when `point` is on the border ring of a box: inside the rect expanded
+ * by the edge tolerance, but not deep in the interior. Handles are tested
+ * separately and win, so this is purely the move affordance.
+ */
+export function isPointNearBoxEdge(rect: Rect, point: Point, scale = 1): boolean {
+  const tolerance = BOX_EDGE_HIT_SIZE / (scale > 0 ? scale : 1)
+  const expanded: Rect = {
+    x: rect.x - tolerance,
+    y: rect.y - tolerance,
+    width: rect.width + tolerance * 2,
+    height: rect.height + tolerance * 2,
+  }
+  if (!rectContains(expanded, point)) return false
+  const interior: Rect = {
+    x: rect.x + tolerance,
+    y: rect.y + tolerance,
+    width: rect.width - tolerance * 2,
+    height: rect.height - tolerance * 2,
+  }
+  return !rectContains(interior, point)
+}
+
+/**
+ * Front-most box whose border ring contains the point, or null. Used for the
+ * edge-grab move: touching a box edge moves it even when unselected, while an
+ * interior drag still draws (nesting).
+ */
+export function boxEdgeHitAtPoint(
+  doc: CaptureDocument,
+  point: Point,
+  scale = 1,
+): BoxAnnotation | null {
+  for (let index = doc.annotations.length - 1; index >= 0; index -= 1) {
+    const annotation = doc.annotations[index]!
+    if (annotation.kind !== 'box') continue
+    if (isPointNearBoxEdge(annotation.rect, point, scale)) return annotation
   }
   return null
 }

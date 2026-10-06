@@ -25,6 +25,7 @@ import {
 import { type Point, rectContains } from '@shared/geometry'
 import {
   type AnnotationHandleId,
+  boxEdgeHitAtPoint,
   type CalloutHit,
   calloutHitAtPoint,
   type EditableAnnotation,
@@ -54,7 +55,12 @@ export type InteractionHandlers = {
 }
 
 type Gesture =
-  | { readonly mode: 'draw' }
+  | {
+      readonly mode: 'draw'
+      /** Shape under the press that drawing started over, for click-to-select. */
+      readonly pressEditable?: EditableAnnotation
+      readonly pressCallout?: CalloutAnnotation
+    }
   | { readonly mode: 'crop-resize'; readonly handle: HandleId }
   | { readonly mode: 'crop-move'; readonly last: Point }
   /** The same frame drag outside the Crop tool, applied when the mouse comes up. */
@@ -149,38 +155,54 @@ export function attachInteractions(
       // Callouts answer first: the yellow tip re-aims, handles resize, and the
       // bubble moves or opens for typing.
       const calloutHit = calloutHitAtPoint(currentDocument(state), point, view.scale())
-      if (calloutHit) {
+      const editHit = editableHitAtPoint(currentDocument(state), point, view.scale())
+      const drawing = isDrawingTool(state.tool)
+      const textTool = state.tool === 'text'
+
+      // Handles always win, so an unselected shape can still be resized and a
+      // callout tip re-aimed without selecting first.
+      if (calloutHit?.part === 'tail') {
         event.preventDefault()
         const origin = currentDocument(state)
         store.set(setSelectedAnnotation(state, calloutHit.callout.id))
-        if (calloutHit.part === 'tail') {
-          canvas.style.cursor = canvasCursor({ kind: 'pointer' })
-          gesture = {
-            mode: 'callout-tail',
-            callout: calloutHit.callout,
-            origin,
-            start: point,
-            moved: false,
-          }
-          return
-        }
-        if (calloutHit.part === 'handle') {
-          canvas.style.cursor = canvasCursor({
-            kind: 'resize',
-            cursor: cursorForHandle(calloutHit.handle),
-          })
-          gesture = {
-            mode: 'callout-resize',
-            callout: calloutHit.callout,
-            handle: calloutHit.handle,
-            origin,
-          }
-          return
-        }
-        canvas.style.cursor = canvasCursor({ kind: 'move' })
+        canvas.style.cursor = canvasCursor({ kind: 'pointer' })
         gesture = {
-          mode: 'callout-move',
+          mode: 'callout-tail',
           callout: calloutHit.callout,
+          origin,
+          start: point,
+          moved: false,
+        }
+        return
+      }
+      if (calloutHit?.part === 'handle') {
+        event.preventDefault()
+        const origin = currentDocument(state)
+        store.set(setSelectedAnnotation(state, calloutHit.callout.id))
+        canvas.style.cursor = canvasCursor({
+          kind: 'resize',
+          cursor: cursorForHandle(calloutHit.handle),
+        })
+        gesture = {
+          mode: 'callout-resize',
+          callout: calloutHit.callout,
+          handle: calloutHit.handle,
+          origin,
+        }
+        return
+      }
+      if (editHit?.handle) {
+        event.preventDefault()
+        const origin = currentDocument(state)
+        store.set(setSelectedAnnotation(state, editHit.annotation.id))
+        canvas.style.cursor = canvasCursor({
+          kind: 'resize',
+          cursor: cursorForHandle(editHit.handle),
+        })
+        gesture = {
+          mode: 'annotation-resize',
+          annotation: editHit.annotation,
+          handle: editHit.handle,
           origin,
           last: point,
           moved: false,
@@ -188,38 +210,130 @@ export function attachInteractions(
         return
       }
 
-      // Boxes, arrows, and text: grab in any tool, same as callouts.
-      const editHit = editableHitAtPoint(currentDocument(state), point, view.scale())
-      if (editHit) {
+      const calloutBody = calloutHit?.part === 'body' ? calloutHit.callout : null
+      const editableBody = !calloutHit && editHit ? editHit.annotation : null
+
+      // Touching a box edge grabs it for moving — hand cursor, no
+      // pre-select needed — while an interior drag still draws (nesting).
+      // Handles were already handled above, so they keep winning for resize.
+      const edgeBox = !calloutHit
+        ? boxEdgeHitAtPoint(currentDocument(state), point, view.scale())
+        : null
+      if (edgeBox) {
         event.preventDefault()
         const origin = currentDocument(state)
-        store.set(setSelectedAnnotation(state, editHit.annotation.id))
-        canvas.style.cursor = canvasCursor(
-          editHit.handle
-            ? { kind: 'resize', cursor: cursorForHandle(editHit.handle) }
-            : { kind: 'move' },
-        )
-        gesture = editHit.handle
-          ? {
-              mode: 'annotation-resize',
-              annotation: editHit.annotation,
-              handle: editHit.handle,
-              origin,
-              last: point,
-              moved: false,
-            }
-          : {
-              mode: 'annotation-move',
-              annotation: editHit.annotation,
-              origin,
-              last: point,
-              moved: false,
-            }
+        store.set(setSelectedAnnotation(state, edgeBox.id))
+        canvas.style.cursor = canvasCursor({ kind: 'grabbing' })
+        gesture = {
+          mode: 'annotation-move',
+          annotation: edgeBox,
+          origin,
+          last: point,
+          moved: false,
+        }
         return
       }
 
-      // Pressing empty canvas drops the selection.
-      store.set(setSelectedAnnotation(state, null))
+      if (drawing) {
+        // Drawing wins over moving for boxes/arrows/text, so a drag inside an
+        // existing box starts a nested box instead of dragging the outer one. A
+        // body only moves once it is selected: click to select, then drag to
+        // move. Callouts keep grabbing immediately so a bubble still moves (or
+        // opens for typing) in any tool.
+        if (calloutBody) {
+          event.preventDefault()
+          const origin = currentDocument(state)
+          store.set(setSelectedAnnotation(state, calloutBody.id))
+          canvas.style.cursor = canvasCursor({ kind: 'move' })
+          gesture = {
+            mode: 'callout-move',
+            callout: calloutBody,
+            origin,
+            last: point,
+            moved: false,
+          }
+          return
+        }
+        if (editableBody) {
+          // Even a selected box keeps drawing from its interior; moving is the
+          // edge's job, or any body drag once another tool takes over.
+          gesture = { mode: 'draw', pressEditable: editableBody }
+          canvas.style.cursor = RETICLE_CURSOR
+          store.set(setDraft(state, beginDraft(state.tool, point)))
+          return
+        }
+        // Pressing empty canvas drops the selection; trim/draw below takes over.
+        store.set(setSelectedAnnotation(state, null))
+      } else if (textTool) {
+        // The Text tool places inside boxes. Callouts still win so any tool can
+        // reopen a note; boxes/arrows/text only move once selected.
+        if (calloutBody) {
+          event.preventDefault()
+          const origin = currentDocument(state)
+          store.set(setSelectedAnnotation(state, calloutBody.id))
+          canvas.style.cursor = canvasCursor({ kind: 'move' })
+          gesture = {
+            mode: 'callout-move',
+            callout: calloutBody,
+            origin,
+            last: point,
+            moved: false,
+          }
+          return
+        }
+        if (editableBody) {
+          if (editableBody.id === state.selectedAnnotationId) {
+            event.preventDefault()
+            const origin = currentDocument(state)
+            canvas.style.cursor = canvasCursor({ kind: 'move' })
+            gesture = {
+              mode: 'annotation-move',
+              annotation: editableBody,
+              origin,
+              last: point,
+              moved: false,
+            }
+            return
+          }
+          // Fall through to place text inside the unselected shape.
+          store.set(setSelectedAnnotation(state, null))
+        } else {
+          // Pressing empty canvas drops the selection.
+          store.set(setSelectedAnnotation(state, null))
+        }
+      } else {
+        // Crop and any future non-drawing tool: bodies grab immediately.
+        if (calloutBody) {
+          event.preventDefault()
+          const origin = currentDocument(state)
+          store.set(setSelectedAnnotation(state, calloutBody.id))
+          canvas.style.cursor = canvasCursor({ kind: 'move' })
+          gesture = {
+            mode: 'callout-move',
+            callout: calloutBody,
+            origin,
+            last: point,
+            moved: false,
+          }
+          return
+        }
+        if (editableBody) {
+          event.preventDefault()
+          const origin = currentDocument(state)
+          store.set(setSelectedAnnotation(state, editableBody.id))
+          canvas.style.cursor = canvasCursor({ kind: 'move' })
+          gesture = {
+            mode: 'annotation-move',
+            annotation: editableBody,
+            origin,
+            last: point,
+            moved: false,
+          }
+          return
+        }
+        // Pressing empty canvas drops the selection.
+        store.set(setSelectedAnnotation(state, null))
+      }
     }
 
     if (state.cropSession?.mode === 'reframe') {
@@ -334,6 +448,7 @@ export function attachInteractions(
       const dy = point.y - gesture.last.y
       const moved = gesture.moved || Math.hypot(dx, dy) * view.scale() > CALLOUT_DRAG_THRESHOLD
       if (!moved) return
+      canvas.style.cursor = canvasCursor({ kind: 'grabbing' })
       store.set(
         previewDocument(
           state,
@@ -412,12 +527,37 @@ export function attachInteractions(
     }
 
     const editHit = editableHitAtPoint(currentDocument(state), point, view.scale())
+    if (editHit?.handle) {
+      canvas.style.cursor = canvasCursor({
+        kind: 'resize',
+        cursor: cursorForHandle(editHit.handle),
+      })
+      store.set(setHoveredAnnotation(state, editHit.annotation.id))
+      return
+    }
+
+    // Box edges advertise the hand: touching one moves the box even when it is
+    // not selected. Anywhere else inside still draws (nesting).
+    const edgeBox = !calloutHit
+      ? boxEdgeHitAtPoint(currentDocument(state), point, view.scale())
+      : null
+    if (edgeBox) {
+      canvas.style.cursor = canvasCursor({ kind: 'grab' })
+      store.set(setHoveredAnnotation(state, edgeBox.id))
+      return
+    }
+
     if (editHit) {
-      canvas.style.cursor = canvasCursor(
-        editHit.handle
-          ? { kind: 'resize', cursor: cursorForHandle(editHit.handle) }
-          : { kind: 'move' },
-      )
+      if (
+        isDrawingTool(state.tool) ||
+        (state.tool === 'text' && editHit.annotation.id !== state.selectedAnnotationId)
+      ) {
+        // Bodies draw (or place text) on drag; edges move, handled above.
+        canvas.style.cursor = RETICLE_CURSOR
+        store.set(setHoveredAnnotation(state, null))
+        return
+      }
+      canvas.style.cursor = canvasCursor({ kind: 'move' })
       store.set(setHoveredAnnotation(state, editHit.annotation.id))
       return
     }
@@ -476,17 +616,41 @@ export function attachInteractions(
     if (state.draft) {
       // A drag too small to be a shape leaves nothing behind, callouts included:
       // a stray click on the capture should not litter it with empty bubbles.
+      // A click that started on a shape selects it instead, so bodies only move
+      // once selected and drawing inside a box nests rather than drags it.
       const doc = currentDocument(state)
-      const annotation = draftToAnnotation(state.draft, state.style, newId(), outputSize(doc))
+      const id = newId()
+      const annotation = draftToAnnotation(state.draft, state.style, id, outputSize(doc))
       if (!annotation) {
+        if (finished.pressCallout) {
+          const selected = setSelectedAnnotation(setDraft(state, null), finished.pressCallout.id)
+          store.set(selected)
+          handlers.onCalloutEdit(finished.pressCallout)
+          return
+        }
+        if (finished.pressEditable) {
+          store.set(setSelectedAnnotation(setDraft(state, null), finished.pressEditable.id))
+          return
+        }
         store.set(setDraft(state, null))
         return
       }
-      store.set(commitDocument(state, addAnnotation(doc, annotation)))
+      // Leave the new shape unselected so a follow-up drag inside it nests
+      // again instead of dragging it. To move it, click to select then drag.
+      const committed = commitDocument(state, addAnnotation(doc, annotation))
+      store.set(setSelectedAnnotation(committed, null))
       if (annotation.kind === 'callout') handlers.onCalloutEdit(annotation)
       return
     }
 
+    if (finished.pressCallout) {
+      handlers.onCalloutEdit(finished.pressCallout)
+      return
+    }
+    if (finished.pressEditable) {
+      store.set(setSelectedAnnotation(state, finished.pressEditable.id))
+      return
+    }
     store.set(setDraft(state, null))
   })
 

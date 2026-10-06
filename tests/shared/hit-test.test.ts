@@ -6,10 +6,12 @@ import {
   annotationAtPoint,
   annotationBounds,
   annotationHandleAtPoint,
+  boxEdgeHitAtPoint,
   calloutHitAtPoint,
   editableHitAtPoint,
   handleAtPoint,
   handleRects,
+  isPointNearBoxEdge,
   moveAnnotation,
   resizeAnnotation,
   resizeRect,
@@ -310,5 +312,46 @@ describe('moveAnnotation', () => {
   it('does not mutate the input', () => {
     moveAnnotation(box, 100, 100)
     expect(box.rect).toEqual({ x: 10, y: 10, width: 100, height: 50 })
+  })
+})
+
+describe('box edge grab', () => {
+  const rect = { x: 10, y: 10, width: 100, height: 50 }
+
+  it('hits the border ring but not the deep interior', () => {
+    expect(isPointNearBoxEdge(rect, { x: 10, y: 30 })).toBe(true)
+    expect(isPointNearBoxEdge(rect, { x: 60, y: 10 })).toBe(true)
+    expect(isPointNearBoxEdge(rect, { x: 50, y: 30 })).toBe(false)
+  })
+
+  it('catches just outside the border', () => {
+    expect(isPointNearBoxEdge(rect, { x: 5, y: 30 })).toBe(true)
+    expect(isPointNearBoxEdge(rect, { x: 50, y: 5 })).toBe(true)
+  })
+
+  it('misses far outside the box', () => {
+    expect(isPointNearBoxEdge(rect, { x: 200, y: 200 })).toBe(false)
+    expect(boxEdgeHitAtPoint(createDocument('d', 800, 600), { x: 200, y: 200 })).toBeNull()
+  })
+
+  it('returns the front-most box edge', () => {
+    const doc = addAnnotation(
+      addAnnotation(createDocument('d', 800, 600), box),
+      { ...box, id: 'onTop', rect: { x: 10, y: 10, width: 100, height: 50 } },
+    )
+    expect(boxEdgeHitAtPoint(doc, { x: 10, y: 30 })?.id).toBe('onTop')
+  })
+
+  it('ignores non-box annotations', () => {
+    const doc = addAnnotation(createDocument('d', 800, 600), {
+      id: 'blur', kind: 'blur', rect: { x: 10, y: 10, width: 100, height: 50 },
+    })
+    expect(boxEdgeHitAtPoint(doc, { x: 10, y: 30 })).toBeNull()
+  })
+
+  it('keeps the grab area constant on screen at any zoom', () => {
+    // 20px left of the border: outside the 12px grab area at 1x, inside at 0.25x.
+    expect(isPointNearBoxEdge(rect, { x: -10, y: 30 }, 1)).toBe(false)
+    expect(isPointNearBoxEdge(rect, { x: -10, y: 30 }, 0.25)).toBe(true)
   })
 })

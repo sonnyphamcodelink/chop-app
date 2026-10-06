@@ -76,3 +76,11 @@ export const HANDLE_SIZE = 10
 
 /** Edge length of the (invisible) grab area around a handle, in canvas pixels. */
 export const HANDLE_HIT_SIZE = 24
+
+/**
+ * How close to a box border the pointer must be to grab it for moving, in
+ * canvas pixels. Kept constant on screen so the edge stays easy to catch at
+ * any zoom. Interior drags still draw (nesting), so the edge is the move
+ * affordance for unselected boxes.
+ */
+export const BOX_EDGE_HIT_SIZE = 12
